@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { KanbanBoard } from '@/components/kanban-board'
+import { HostedSidebar } from '@/components/hosted-sidebar'
 import type { Job, Workspace } from '@/lib/types'
 
 export function AppShell() {
@@ -74,66 +75,77 @@ export function AppShell() {
   const visibleJobs = useMemo(() => jobs.filter((job) => !selectedWorkspaceId || job.workspaceId === selectedWorkspaceId), [jobs, selectedWorkspaceId])
 
   return (
-    <div className="space-y-8">
-      <section className="flex justify-end">
-        <button className="rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-300" onClick={logout}>Log out</button>
-      </section>
+    <div className="flex min-h-screen">
+      <HostedSidebar workspaces={workspaces} selectedWorkspaceId={selectedWorkspaceId} onSelectWorkspace={setSelectedWorkspaceId} />
 
-      <section className="grid md:grid-cols-2 gap-4">
-        <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5 space-y-3">
-          <h2 className="font-semibold">Create workspace</h2>
-          <div className="flex gap-2">
-            <input className="flex-1 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2" value={newWorkspaceName} onChange={(e) => setNewWorkspaceName(e.target.value)} placeholder="Workspace name" />
-            <button className="rounded-lg bg-cyan-500 px-4 py-2 text-slate-950 font-semibold" onClick={createWorkspace}>Add</button>
+      <main className="flex-1 p-8 space-y-8">
+        <section className="flex items-start justify-between gap-6">
+          <div>
+            <p className="text-sm uppercase tracking-[0.25em] text-[hsl(var(--muted-foreground))]">Hosted Content Hub</p>
+            <h1 className="text-4xl font-bold mt-2">Dashboard</h1>
+            <p className="text-[hsl(var(--muted-foreground))] mt-3 max-w-3xl">
+              This hosted version is being shaped to match the desktop Content Hub look and feel rather than Mission Control.
+            </p>
           </div>
-        </div>
-        <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5 space-y-3">
-          <h2 className="font-semibold">Create job</h2>
-          <div className="flex gap-2">
-            <input className="flex-1 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2" value={newJobTitle} onChange={(e) => setNewJobTitle(e.target.value)} placeholder="Job title" />
-            <button className="rounded-lg bg-cyan-500 px-4 py-2 text-slate-950 font-semibold" onClick={createJob}>Add</button>
-          </div>
-        </div>
-      </section>
+          <button className="rounded-lg border border-[hsl(var(--border))] px-4 py-2 text-sm text-[hsl(var(--foreground))]" onClick={logout}>Log out</button>
+        </section>
 
-      <section className="space-y-4">
-        <div className="flex flex-wrap gap-3">
-          {workspaces.map((workspace) => (
-            <div key={workspace.id} className={`rounded-xl border px-4 py-3 min-w-56 ${selectedWorkspaceId === workspace.id ? 'border-cyan-400 bg-slate-900' : 'border-slate-800 bg-slate-950'}`}>
-              {editingWorkspaceId === workspace.id ? (
-                <div className="space-y-2">
-                  <input className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2" value={editingWorkspaceName} onChange={(e) => setEditingWorkspaceName(e.target.value)} />
-                  <div className="flex gap-2">
-                    <button className="rounded-lg bg-cyan-500 px-3 py-2 text-slate-950 text-sm font-semibold" onClick={() => updateWorkspace(workspace.id)}>Save</button>
-                    <button className="rounded-lg border border-slate-700 px-3 py-2 text-sm" onClick={() => setEditingWorkspaceId('')}>Cancel</button>
-                  </div>
-                </div>
-              ) : (
-                <>
-                  <button onClick={() => setSelectedWorkspaceId(workspace.id)} className="w-full text-left">
-                    <div className="flex items-center gap-3">
-                      <span className="h-3 w-3 rounded-full" style={{ backgroundColor: workspace.color }} />
-                      <span className="font-medium">{workspace.name}</span>
-                    </div>
-                  </button>
-                  <div className="flex gap-2 mt-3">
-                    <button className="text-xs text-cyan-300" onClick={() => { setEditingWorkspaceId(workspace.id); setEditingWorkspaceName(workspace.name) }}>Edit</button>
-                    <button className="text-xs text-red-400" onClick={() => deleteWorkspace(workspace.id)}>Delete</button>
-                  </div>
-                </>
-              )}
+        <section className="grid md:grid-cols-2 gap-4">
+          <div className="rounded-2xl border bg-[hsl(var(--card))] p-5 space-y-3">
+            <h2 className="font-semibold">Create workspace</h2>
+            <div className="flex gap-2">
+              <input className="flex-1 rounded-lg border bg-transparent px-3 py-2" value={newWorkspaceName} onChange={(e) => setNewWorkspaceName(e.target.value)} placeholder="Workspace name" />
+              <button className="rounded-lg bg-[hsl(var(--primary))] px-4 py-2 text-[hsl(var(--primary-foreground))] font-semibold" onClick={createWorkspace}>Add</button>
             </div>
-          ))}
-        </div>
-      </section>
+          </div>
+          <div className="rounded-2xl border bg-[hsl(var(--card))] p-5 space-y-3">
+            <h2 className="font-semibold">Create job</h2>
+            <div className="flex gap-2">
+              <input className="flex-1 rounded-lg border bg-transparent px-3 py-2" value={newJobTitle} onChange={(e) => setNewJobTitle(e.target.value)} placeholder="Job title" />
+              <button className="rounded-lg bg-[hsl(var(--primary))] px-4 py-2 text-[hsl(var(--primary-foreground))] font-semibold" onClick={createJob}>Add</button>
+            </div>
+          </div>
+        </section>
 
-      <section className="space-y-4">
-        <div>
-          <h2 className="text-2xl font-semibold">Kanban Dashboard</h2>
-          <p className="text-slate-400 text-sm mt-1">Hosted MVP with live workspaces/jobs via the API layer.</p>
-        </div>
-        <KanbanBoard jobs={visibleJobs} onRefresh={refreshAll} />
-      </section>
+        <section className="space-y-4">
+          <div className="flex flex-wrap gap-3">
+            {workspaces.map((workspace) => (
+              <div key={workspace.id} className={`rounded-xl border px-4 py-3 min-w-56 ${selectedWorkspaceId === workspace.id ? 'bg-[hsl(var(--accent))]' : 'bg-[hsl(var(--card))]'}`}>
+                {editingWorkspaceId === workspace.id ? (
+                  <div className="space-y-2">
+                    <input className="w-full rounded-lg border bg-transparent px-3 py-2" value={editingWorkspaceName} onChange={(e) => setEditingWorkspaceName(e.target.value)} />
+                    <div className="flex gap-2">
+                      <button className="rounded-lg bg-[hsl(var(--primary))] px-3 py-2 text-[hsl(var(--primary-foreground))] text-sm font-semibold" onClick={() => updateWorkspace(workspace.id)}>Save</button>
+                      <button className="rounded-lg border px-3 py-2 text-sm" onClick={() => setEditingWorkspaceId('')}>Cancel</button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <button onClick={() => setSelectedWorkspaceId(workspace.id)} className="w-full text-left">
+                      <div className="flex items-center gap-3">
+                        <span className="h-3 w-3 rounded-full" style={{ backgroundColor: workspace.color }} />
+                        <span className="font-medium">{workspace.name}</span>
+                      </div>
+                    </button>
+                    <div className="flex gap-2 mt-3">
+                      <button className="text-xs text-[hsl(var(--primary))]" onClick={() => { setEditingWorkspaceId(workspace.id); setEditingWorkspaceName(workspace.name) }}>Edit</button>
+                      <button className="text-xs text-red-400" onClick={() => deleteWorkspace(workspace.id)}>Delete</button>
+                    </div>
+                  </>
+                )}
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="space-y-4">
+          <div>
+            <h2 className="text-2xl font-semibold">Kanban Dashboard</h2>
+            <p className="text-[hsl(var(--muted-foreground))] text-sm mt-1">Hosted MVP with live workspaces/jobs via the API layer.</p>
+          </div>
+          <KanbanBoard jobs={visibleJobs} onRefresh={refreshAll} />
+        </section>
+      </main>
     </div>
   )
 }
