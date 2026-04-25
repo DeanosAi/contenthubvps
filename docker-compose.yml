@@ -1,0 +1,28 @@
+version: '3.9'
+services:
+  app:
+    build: .
+    container_name: content-hub-saas
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "3001:3000"
+    depends_on:
+      - postgres
+
+  postgres:
+    image: postgres:17
+    container_name: content-hub-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: content_hub
+      POSTGRES_USER: content_hub
+      POSTGRES_PASSWORD: CHANGE_ME
+    volumes:
+      - content_hub_postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+
+volumes:
+  content_hub_postgres_data:

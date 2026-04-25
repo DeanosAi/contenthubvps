@@ -1,0 +1,66 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum JobStage {
+  brief
+  production
+  ready
+  posted
+  archive
+}
+
+model User {
+  id           String      @id @default(cuid())
+  email        String      @unique
+  passwordHash String
+  name         String?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  workspaces   Workspace[]
+}
+
+model Workspace {
+  id                   String   @id @default(cuid())
+  ownerId              String
+  name                 String
+  color                String   @default("#8b5cf6")
+  sortOrder            Int      @default(0)
+  facebookPageUrl      String?
+  instagramPageUrl     String?
+  brandBackgroundColor String?
+  brandHighlightColor  String?
+  brandFontColor       String?
+  brandLogoDataUrl     String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  owner                User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  jobs                 Job[]
+}
+
+model Job {
+  id               String    @id @default(cuid())
+  workspaceId      String
+  title            String
+  description      String?
+  stage            JobStage  @default(brief)
+  priority         Int       @default(0)
+  dueDate          DateTime?
+  platformJson     Json?
+  hashtags         String?
+  fileLinksJson    Json?
+  liveUrl          String?
+  instagramLiveUrl String?
+  facebookLiveUrl  String?
+  facebookPostId   String?
+  liveMetricsJson  Json?
+  platformMetrics  Json?
+  customFieldsJson Json?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  workspace        Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+}
