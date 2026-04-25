@@ -4,12 +4,12 @@ import { useMemo } from 'react'
 import type { Job, JobStage } from '@/lib/types'
 import { JobEditor } from '@/components/job-editor'
 
-const STAGES: { id: JobStage; label: string }[] = [
-  { id: 'brief', label: 'Brief' },
-  { id: 'production', label: 'In Production' },
-  { id: 'ready', label: 'Ready' },
-  { id: 'posted', label: 'Posted' },
-  { id: 'archive', label: 'Archive' },
+const STAGES: { id: JobStage; label: string; dot: string; bg: string }[] = [
+  { id: 'brief', label: 'Brief', dot: '#64748b', bg: 'rgba(100,116,139,0.10)' },
+  { id: 'production', label: 'In Production', dot: '#3b82f6', bg: 'rgba(59,130,246,0.10)' },
+  { id: 'ready', label: 'Ready for Posting', dot: '#f59e0b', bg: 'rgba(245,158,11,0.10)' },
+  { id: 'posted', label: 'Posted', dot: '#10b981', bg: 'rgba(16,185,129,0.10)' },
+  { id: 'archive', label: 'Archive', dot: '#4b5563', bg: 'rgba(75,85,99,0.10)' },
 ]
 
 export function KanbanBoard({ jobs, onRefresh }: { jobs: Job[]; onRefresh: () => void }) {
@@ -23,24 +23,27 @@ export function KanbanBoard({ jobs, onRefresh }: { jobs: Job[]; onRefresh: () =>
   return (
     <div className="grid xl:grid-cols-5 md:grid-cols-2 gap-4">
       {grouped.map((column) => (
-        <div key={column.id} className="rounded-2xl border border-slate-800 bg-slate-900 min-h-[380px]">
-          <div className="p-4 border-b border-slate-800 flex items-center justify-between">
-            <h3 className="font-semibold">{column.label}</h3>
-            <span className="text-xs text-slate-400">{column.jobs.length}</span>
+        <div key={column.id} className="rounded-2xl border min-h-[460px] flex flex-col" style={{ backgroundColor: column.bg }}>
+          <div className="p-4 border-b bg-[hsl(var(--card))]/70 backdrop-blur-sm flex items-center justify-between rounded-t-2xl">
+            <div className="flex items-center gap-2">
+              <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: column.dot }} />
+              <h3 className="font-semibold text-sm">{column.label}</h3>
+            </div>
+            <span className="text-xs text-[hsl(var(--muted-foreground))] rounded-full border px-2 py-1">{column.jobs.length}</span>
           </div>
-          <div className="p-3 space-y-3">
+          <div className="p-3 space-y-3 flex-1">
             {column.jobs.map((job) => (
-              <div key={job.id} className="rounded-xl border border-slate-800 bg-slate-950 p-3 space-y-2">
+              <div key={job.id} className="rounded-xl border bg-[hsl(var(--background))] p-3 space-y-2 shadow-sm">
                 <div className="flex items-start justify-between gap-2">
                   <h4 className="font-medium text-sm leading-snug">{job.title}</h4>
-                  {job.priority > 0 && <span className="text-[10px] rounded-full bg-cyan-500/15 text-cyan-300 px-2 py-1">P{job.priority}</span>}
+                  {job.priority > 0 && <span className="text-[10px] rounded-full bg-[hsl(var(--primary))]/15 text-[hsl(var(--primary))] px-2 py-1">P{job.priority}</span>}
                 </div>
-                {job.description && <p className="text-xs text-slate-400">{job.description}</p>}
-                {job.hashtags && <p className="text-[11px] text-slate-500">{job.hashtags}</p>}
+                {job.description && <p className="text-xs text-[hsl(var(--muted-foreground))]">{job.description}</p>}
+                {job.hashtags && <p className="text-[11px] text-[hsl(var(--muted-foreground))]">{job.hashtags}</p>}
                 <JobEditor job={job} onSaved={onRefresh} onDeleted={onRefresh} />
               </div>
             ))}
-            {column.jobs.length === 0 && <p className="text-xs text-slate-500">No jobs yet</p>}
+            {column.jobs.length === 0 && <p className="text-xs text-[hsl(var(--muted-foreground))]">No jobs yet</p>}
           </div>
         </div>
       ))}

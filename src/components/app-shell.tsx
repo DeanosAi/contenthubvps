@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { KanbanBoard } from '@/components/kanban-board'
 import { HostedSidebar } from '@/components/hosted-sidebar'
+import { DashboardStats } from '@/components/dashboard-stats'
 import type { Job, Workspace } from '@/lib/types'
 
 export function AppShell() {
@@ -73,6 +74,7 @@ export function AppShell() {
   }
 
   const visibleJobs = useMemo(() => jobs.filter((job) => !selectedWorkspaceId || job.workspaceId === selectedWorkspaceId), [jobs, selectedWorkspaceId])
+  const activeWorkspace = workspaces.find((w) => w.id === selectedWorkspaceId)
 
   return (
     <div className="flex min-h-screen">
@@ -84,11 +86,13 @@ export function AppShell() {
             <p className="text-sm uppercase tracking-[0.25em] text-[hsl(var(--muted-foreground))]">Hosted Content Hub</p>
             <h1 className="text-4xl font-bold mt-2">Dashboard</h1>
             <p className="text-[hsl(var(--muted-foreground))] mt-3 max-w-3xl">
-              This hosted version is being shaped to match the desktop Content Hub look and feel rather than Mission Control.
+              {activeWorkspace ? `Currently viewing ${activeWorkspace.name}.` : 'Select a workspace to manage content jobs.'}
             </p>
           </div>
           <button className="rounded-lg border border-[hsl(var(--border))] px-4 py-2 text-sm text-[hsl(var(--foreground))]" onClick={logout}>Log out</button>
         </section>
+
+        <DashboardStats jobs={visibleJobs} />
 
         <section className="grid md:grid-cols-2 gap-4">
           <div className="rounded-2xl border bg-[hsl(var(--card))] p-5 space-y-3">
