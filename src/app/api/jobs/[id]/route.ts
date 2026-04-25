@@ -8,8 +8,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const { id } = await params
   const body = await req.json()
   await pool.query(
-    'UPDATE jobs SET title = $1, description = $2, stage = $3, priority = $4, hashtags = $5, updated_at = NOW() WHERE id = $6',
-    [String(body.title || '').trim(), body.description ? String(body.description) : null, String(body.stage || 'brief'), Number(body.priority || 0), body.hashtags ? String(body.hashtags) : null, id]
+    'UPDATE jobs SET title = $1, description = $2, stage = $3, priority = $4, hashtags = $5, platform = $6, live_url = $7, notes = $8, updated_at = NOW() WHERE id = $9',
+    [String(body.title || '').trim(), body.description ? String(body.description) : null, String(body.stage || 'brief'), Number(body.priority || 0), body.hashtags ? String(body.hashtags) : null, body.platform ? String(body.platform) : null, body.liveUrl ? String(body.liveUrl) : null, body.notes ? String(body.notes) : null, id]
   )
   return NextResponse.json({ ok: true })
 }

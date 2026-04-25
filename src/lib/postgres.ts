@@ -33,8 +33,15 @@ export async function ensureSchema() {
       priority INTEGER NOT NULL DEFAULT 0,
       due_date TIMESTAMPTZ,
       hashtags TEXT,
+      platform TEXT,
+      live_url TEXT,
+      notes TEXT,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
   `)
+
+  await pool.query(`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS platform TEXT;`)
+  await pool.query(`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS live_url TEXT;`)
+  await pool.query(`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS notes TEXT;`)
 }

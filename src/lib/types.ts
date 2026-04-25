@@ -19,6 +19,9 @@ export interface Job {
   priority: number
   dueDate: string | null
   hashtags: string | null
+  platform: string | null
+  liveUrl: string | null
+  notes: string | null
   createdAt: string
   updatedAt: string
 }

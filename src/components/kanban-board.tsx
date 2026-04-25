@@ -2,7 +2,6 @@
 
 import { useMemo } from 'react'
 import type { Job, JobStage } from '@/lib/types'
-import { JobEditor } from '@/components/job-editor'
 
 const STAGES: { id: JobStage; label: string; dot: string; bg: string }[] = [
   { id: 'brief', label: 'Brief', dot: '#64748b', bg: 'rgba(100,116,139,0.10)' },
@@ -12,7 +11,7 @@ const STAGES: { id: JobStage; label: string; dot: string; bg: string }[] = [
   { id: 'archive', label: 'Archive', dot: '#4b5563', bg: 'rgba(75,85,99,0.10)' },
 ]
 
-export function KanbanBoard({ jobs, onRefresh }: { jobs: Job[]; onRefresh: () => void }) {
+export function KanbanBoard({ jobs, onSelectJob }: { jobs: Job[]; onSelectJob: (job: Job) => void }) {
   const grouped = useMemo(() => {
     return STAGES.map((stage) => ({
       ...stage,
@@ -33,15 +32,17 @@ export function KanbanBoard({ jobs, onRefresh }: { jobs: Job[]; onRefresh: () =>
           </div>
           <div className="p-3 space-y-3 flex-1">
             {column.jobs.map((job) => (
-              <div key={job.id} className="rounded-xl border bg-[hsl(var(--background))] p-3 space-y-2 shadow-sm">
+              <button key={job.id} onClick={() => onSelectJob(job)} className="w-full text-left rounded-xl border bg-[hsl(var(--background))] p-3 space-y-2 shadow-sm hover:border-[hsl(var(--primary))]/40 transition-colors">
                 <div className="flex items-start justify-between gap-2">
                   <h4 className="font-medium text-sm leading-snug">{job.title}</h4>
                   {job.priority > 0 && <span className="text-[10px] rounded-full bg-[hsl(var(--primary))]/15 text-[hsl(var(--primary))] px-2 py-1">P{job.priority}</span>}
                 </div>
                 {job.description && <p className="text-xs text-[hsl(var(--muted-foreground))]">{job.description}</p>}
-                {job.hashtags && <p className="text-[11px] text-[hsl(var(--muted-foreground))]">{job.hashtags}</p>}
-                <JobEditor job={job} onSaved={onRefresh} onDeleted={onRefresh} />
-              </div>
+                <div className="flex flex-wrap gap-2 text-[11px] text-[hsl(var(--muted-foreground))]">
+                  {job.platform && <span className="rounded-full border px-2 py-1">{job.platform}</span>}
+                  {job.hashtags && <span>{job.hashtags}</span>}
+                </div>
+              </button>
             ))}
             {column.jobs.length === 0 && <p className="text-xs text-[hsl(var(--muted-foreground))]">No jobs yet</p>}
           </div>
