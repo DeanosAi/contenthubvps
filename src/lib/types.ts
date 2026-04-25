@@ -20,6 +20,25 @@ export interface AssetLink {
   url: string
 }
 
+/** Available data shapes for a custom field. Kept narrow so the UI can
+ * render the right input control for each. */
+export type CustomFieldType = 'text' | 'textarea' | 'number' | 'date' | 'url'
+
+/** A user-defined extra field on a job. Briefs/clients sometimes need
+ * one-off fields — campaign code, vendor reference, target audience, etc.
+ * Rather than adding a column for each, jobs carry an array of these. */
+export interface CustomField {
+  /** Stable id within the job — used as React keys and for delete-by-id. */
+  id: string
+  /** Display name shown next to the input. */
+  label: string
+  /** Determines the input control rendered. */
+  type: CustomFieldType
+  /** Always serialised as a string in the DB. The UI is responsible for
+   * coercing on save (e.g. number inputs validate before submit). */
+  value: string
+}
+
 export interface User {
   id: string
   email: string
@@ -59,6 +78,8 @@ export interface Job {
   assetLinks: AssetLink[]
   approvalStatus: ApprovalStatus
   assignedTo: string | null
+  /** User-defined extra fields. See CustomField above. */
+  customFields: CustomField[]
   // Optional Facebook fields preserved from desktop app, used by metrics
   // fetching paths added in later rounds.
   facebookLiveUrl: string | null

@@ -1,9 +1,10 @@
 "use client"
 
 import { useEffect, useState } from 'react'
-import type { Job, JobStage, ApprovalStatus, AssetLink } from '@/lib/types'
+import type { Job, JobStage, ApprovalStatus, AssetLink, CustomField } from '@/lib/types'
 import { useUsers } from '@/lib/use-users'
 import { AssetLinksEditor } from './asset-links-editor'
+import { CustomFieldsEditor } from './custom-fields-editor'
 
 const STAGES: JobStage[] = ['brief', 'production', 'ready', 'posted', 'archive']
 const APPROVALS: { value: ApprovalStatus; label: string; tone: string }[] = [
@@ -30,6 +31,7 @@ type Editable = Pick<
   | 'contentType'
   | 'briefUrl'
   | 'assetLinks'
+  | 'customFields'
   | 'approvalStatus'
   | 'assignedTo'
   | 'facebookLiveUrl'
@@ -99,6 +101,7 @@ export function JobDetailPanel({
       contentType: form.contentType,
       briefUrl: form.briefUrl,
       assetLinks: form.assetLinks,
+      customFields: form.customFields,
       approvalStatus: form.approvalStatus,
       assignedTo: form.assignedTo,
       facebookLiveUrl: form.facebookLiveUrl,
@@ -363,6 +366,15 @@ export function JobDetailPanel({
               />
             </div>
           </div>
+        </section>
+
+        {/* Section: custom fields */}
+        <section>
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-[hsl(var(--muted-foreground))] mb-2">Custom fields</h3>
+          <CustomFieldsEditor
+            fields={form.customFields}
+            onChange={(next: CustomField[]) => patch('customFields', next)}
+          />
         </section>
 
         {/* Section: notes */}

@@ -6,6 +6,14 @@ import { rowToJob } from '@/lib/db-mappers'
 
 const STAGES = ['brief', 'production', 'ready', 'posted', 'archive'] as const
 const APPROVAL = ['none', 'awaiting', 'approved', 'changes_requested'] as const
+const FIELD_TYPES = ['text', 'textarea', 'number', 'date', 'url'] as const
+
+const CustomFieldSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  type: z.enum(FIELD_TYPES),
+  value: z.string(),
+})
 
 const UpdateJobInput = z
   .object({
@@ -21,6 +29,7 @@ const UpdateJobInput = z
     contentType: z.string().nullable().optional(),
     briefUrl: z.string().nullable().optional(),
     assetLinks: z.array(z.object({ id: z.string(), label: z.string(), url: z.string() })).nullable().optional(),
+    customFields: z.array(CustomFieldSchema).nullable().optional(),
     approvalStatus: z.enum(APPROVAL).optional(),
     assignedTo: z.string().nullable().optional(),
     facebookLiveUrl: z.string().nullable().optional(),
@@ -34,6 +43,7 @@ const COLUMN_LIST = `
   id, workspace_id, title, description, stage, priority, due_date,
   hashtags, platform, live_url, notes,
   content_type, brief_url, asset_links_json, approval_status, assigned_to,
+  custom_fields_json,
   facebook_live_url, facebook_post_id, instagram_live_url,
   created_at, updated_at
 `
@@ -51,6 +61,7 @@ const COLUMN_MAP: Record<string, string> = {
   contentType: 'content_type',
   briefUrl: 'brief_url',
   assetLinks: 'asset_links_json',
+  customFields: 'custom_fields_json',
   approvalStatus: 'approval_status',
   assignedTo: 'assigned_to',
   facebookLiveUrl: 'facebook_live_url',
@@ -58,6 +69,8 @@ const COLUMN_MAP: Record<string, string> = {
   instagramLiveUrl: 'instagram_live_url',
   workspaceId: 'workspace_id',
 }
+
+const JSONB_KEYS = new Set(['assetLinks', 'customFields'])
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getSession()
@@ -91,7 +104,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     sets.push(`${col} = $${n++}`)
     if (k === 'dueDate') {
       values.push(v ? new Date(v as string) : null)
-    } else if (k === 'assetLinks') {
+    } else if (JSONB_KEYS.has(k)) {
       values.push(v == null ? null : JSON.stringify(v))
     } else {
       values.push(v)

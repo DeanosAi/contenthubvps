@@ -103,12 +103,33 @@ export function KanbanBoard({
                     return (
                       <Draggable draggableId={job.id} index={index} key={job.id}>
                         {(prov, snap) => (
-                          <button
+                          // KEY DRAG-DROP FIX: this MUST be a <div> with
+                          // role="button", not an actual <button> element.
+                          // @hello-pangea/dnd installs HTML5 drag handlers
+                          // via dragHandleProps. Browsers handle native
+                          // <button> drag events differently than div drag
+                          // events — drops don't fire reliably on buttons,
+                          // which manifests as "card visually drags but
+                          // doesn't move on drop." The library docs
+                          // explicitly recommend div + role="button" +
+                          // tabIndex + keyboard handler for accessibility.
+                          <div
                             ref={prov.innerRef}
                             {...prov.draggableProps}
                             {...prov.dragHandleProps}
+                            role="button"
+                            tabIndex={0}
                             onClick={() => onSelectJob(job)}
-                            className={`w-full text-left rounded-xl border bg-[hsl(var(--background))] p-3 space-y-2 shadow-sm hover:border-[hsl(var(--primary))]/40 transition-colors ${
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                // Don't intercept the spacebar during a
+                                // drag — dnd uses spacebar to lift/drop.
+                                if (snap.isDragging) return
+                                e.preventDefault()
+                                onSelectJob(job)
+                              }
+                            }}
+                            className={`w-full text-left rounded-xl border bg-[hsl(var(--background))] p-3 space-y-2 shadow-sm hover:border-[hsl(var(--primary))]/40 transition-colors cursor-pointer ${
                               snap.isDragging ? 'shadow-xl ring-1 ring-[hsl(var(--primary))]/60' : ''
                             }`}
                           >
@@ -163,7 +184,7 @@ export function KanbanBoard({
                                 </span>
                               </div>
                             )}
-                          </button>
+                          </div>
                         )}
                       </Draggable>
                     )

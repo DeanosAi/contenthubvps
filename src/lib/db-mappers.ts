@@ -12,6 +12,8 @@
 import type {
   AssetLink,
   ApprovalStatus,
+  CustomField,
+  CustomFieldType,
   Job,
   User,
   Workspace,
@@ -81,6 +83,29 @@ function mapAssetLinks(raw: unknown): AssetLink[] {
     .filter((link) => link.url.length > 0)
 }
 
+function mapCustomFields(raw: unknown): CustomField[] {
+  const parsed = parseJson<unknown>(raw, [])
+  if (!Array.isArray(parsed)) return []
+  const allowedTypes: CustomFieldType[] = ['text', 'textarea', 'number', 'date', 'url']
+  return parsed
+    .filter((item): item is Record<string, unknown> => typeof item === 'object' && item !== null)
+    .map((item) => {
+      const t = String(item.type ?? 'text')
+      const safeType: CustomFieldType = (allowedTypes as string[]).includes(t)
+        ? (t as CustomFieldType)
+        : 'text'
+      return {
+        id: asString(item.id) || crypto.randomUUID(),
+        label: asString(item.label),
+        type: safeType,
+        value: asString(item.value),
+      }
+    })
+    // Drop entries where the user gave it neither a label nor a value —
+    // they're noise from a half-typed addition that wasn't filled in.
+    .filter((cf) => cf.label.length > 0 || cf.value.length > 0)
+}
+
 function mapApprovalStatus(v: unknown): ApprovalStatus {
   const allowed: ApprovalStatus[] = ['none', 'awaiting', 'approved', 'changes_requested']
   const s = String(v ?? 'none')
@@ -134,6 +159,7 @@ export function rowToJob(row: Row): Job {
     assetLinks: mapAssetLinks(row.asset_links_json),
     approvalStatus: mapApprovalStatus(row.approval_status),
     assignedTo: asNullableString(row.assigned_to),
+    customFields: mapCustomFields(row.custom_fields_json),
     facebookLiveUrl: asNullableString(row.facebook_live_url),
     facebookPostId: asNullableString(row.facebook_post_id),
     instagramLiveUrl: asNullableString(row.instagram_live_url),

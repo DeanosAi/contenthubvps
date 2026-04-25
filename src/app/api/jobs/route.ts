@@ -7,6 +7,14 @@ import { rowToJob } from '@/lib/db-mappers'
 
 const STAGES = ['brief', 'production', 'ready', 'posted', 'archive'] as const
 const APPROVAL = ['none', 'awaiting', 'approved', 'changes_requested'] as const
+const FIELD_TYPES = ['text', 'textarea', 'number', 'date', 'url'] as const
+
+const CustomFieldSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  type: z.enum(FIELD_TYPES),
+  value: z.string(),
+})
 
 const CreateJobInput = z.object({
   workspaceId: z.string().min(1, 'workspaceId is required'),
@@ -30,6 +38,7 @@ const CreateJobInput = z.object({
       })
     )
     .optional(),
+  customFields: z.array(CustomFieldSchema).optional(),
   approvalStatus: z.enum(APPROVAL).optional(),
   assignedTo: z.string().nullable().optional(),
   facebookLiveUrl: z.string().nullable().optional(),
@@ -40,6 +49,7 @@ const COLUMN_LIST = `
   id, workspace_id, title, description, stage, priority, due_date,
   hashtags, platform, live_url, notes,
   content_type, brief_url, asset_links_json, approval_status, assigned_to,
+  custom_fields_json,
   facebook_live_url, facebook_post_id, instagram_live_url,
   created_at, updated_at
 `
@@ -96,12 +106,14 @@ export async function POST(req: NextRequest) {
       id, workspace_id, title, description, stage, priority, due_date,
       hashtags, platform, live_url, notes,
       content_type, brief_url, asset_links_json, approval_status, assigned_to,
+      custom_fields_json,
       facebook_live_url, instagram_live_url
     ) VALUES (
       $1, $2, $3, $4, $5, $6, $7,
       $8, $9, $10, $11,
       $12, $13, $14, $15, $16,
-      $17, $18
+      $17,
+      $18, $19
     )`,
     [
       id,
@@ -120,6 +132,7 @@ export async function POST(req: NextRequest) {
       parsed.data.assetLinks ? JSON.stringify(parsed.data.assetLinks) : null,
       parsed.data.approvalStatus ?? 'none',
       parsed.data.assignedTo ?? null,
+      parsed.data.customFields ? JSON.stringify(parsed.data.customFields) : null,
       parsed.data.facebookLiveUrl ?? null,
       parsed.data.instagramLiveUrl ?? null,
     ]

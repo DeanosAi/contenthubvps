@@ -34,3 +34,40 @@ body {
 * {
   border-color: hsl(var(--border));
 }
+
+/*
+ * Native <select> and <option> elements don't inherit Tailwind utility
+ * classes the way other elements do — the closed control respects the
+ * surrounding bg-transparent, but the open dropdown menu is a native OS
+ * widget that uses its own defaults. On the dark theme this produced
+ * white text on a white background (unreadable).
+ *
+ * The fix below explicitly paints select/option using the dark theme
+ * colour tokens. `color-scheme: dark` also tells the browser to render
+ * the dropdown's surrounding chrome (scrollbars, focus rings) in dark
+ * mode, which most modern browsers respect.
+ */
+select {
+  color-scheme: dark;
+  color: hsl(var(--foreground));
+}
+
+select option {
+  background-color: hsl(var(--card));
+  color: hsl(var(--foreground));
+}
+
+select option:checked {
+  background-color: hsl(var(--accent));
+  color: hsl(var(--accent-foreground));
+}
+
+/* Same treatment for date / time pickers — they also render OS-native
+ * pop-ups that need explicit dark-mode signalling. */
+input[type="date"],
+input[type="time"],
+input[type="datetime-local"],
+input[type="month"],
+input[type="week"] {
+  color-scheme: dark;
+}

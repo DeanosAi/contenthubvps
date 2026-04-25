@@ -86,6 +86,10 @@ export async function ensureSchema(): Promise<void> {
   await pool.query(`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS facebook_live_url TEXT;`)
   await pool.query(`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS facebook_post_id TEXT;`)
   await pool.query(`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS instagram_live_url TEXT;`)
+  // Custom fields — user-defined per-job key/value pairs of the desktop-app
+  // form. Stored as a JSON array of {id, label, type, value} objects so that
+  // each job can have a different shape without rigid columns.
+  await pool.query(`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS custom_fields_json JSONB;`)
 
   // ---------- settings ----------
   // Simple key-value store. Phase 6 (Settings/Branding) reads/writes here.

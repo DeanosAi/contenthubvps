@@ -1,9 +1,10 @@
 "use client"
 
 import { useEffect, useState } from 'react'
-import type { Job, JobStage, Workspace, AssetLink, ApprovalStatus } from '@/lib/types'
+import type { Job, JobStage, Workspace, AssetLink, ApprovalStatus, CustomField } from '@/lib/types'
 import { useUsers } from '@/lib/use-users'
 import { AssetLinksEditor } from './asset-links-editor'
+import { CustomFieldsEditor } from './custom-fields-editor'
 
 const STAGES: JobStage[] = ['brief', 'production', 'ready', 'posted', 'archive']
 const PLATFORMS = ['', 'instagram', 'facebook', 'tiktok', 'youtube']
@@ -28,6 +29,7 @@ interface CreatePayload {
   contentType: string | null
   briefUrl: string | null
   assetLinks: AssetLink[]
+  customFields: CustomField[]
   approvalStatus: ApprovalStatus
   assignedTo: string | null
 }
@@ -45,6 +47,7 @@ const EMPTY_DRAFT: Omit<CreatePayload, 'workspaceId'> = {
   contentType: null,
   briefUrl: null,
   assetLinks: [],
+  customFields: [],
   approvalStatus: 'none',
   assignedTo: null,
 }
@@ -298,6 +301,16 @@ export function JobCreateDialog({
                 placeholder="https://drive.google.com/…"
               />
             </div>
+          </div>
+
+          <div className="space-y-3 pt-4 border-t border-[hsl(var(--border))]">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-[hsl(var(--muted-foreground))]">
+              Custom fields
+            </h3>
+            <CustomFieldsEditor
+              fields={draft.customFields}
+              onChange={(next) => patch('customFields', next)}
+            />
           </div>
         </div>
 

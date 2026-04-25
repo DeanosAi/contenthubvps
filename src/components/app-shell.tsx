@@ -24,11 +24,6 @@ export function AppShell() {
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string>('')
   const [selectedJob, setSelectedJob] = useState<Job | null>(null)
 
-  // ---------- workspace creation/edit (kept from Round 1) ----------
-  const [newWorkspaceName, setNewWorkspaceName] = useState('')
-  const [editingWorkspaceId, setEditingWorkspaceId] = useState<string>('')
-  const [editingWorkspaceName, setEditingWorkspaceName] = useState('')
-
   // ---------- view + filters ----------
   const [view, setView] = useState<JobView>('kanban')
   const [filter, setFilter] = useState<JobFilterState>(DEFAULT_FILTER_STATE)
@@ -112,40 +107,34 @@ export function AppShell() {
     }
   }
 
-  // ---------- workspace mutations ----------
-  async function createWorkspace() {
-    if (!newWorkspaceName.trim()) return
+  // ---------- workspace mutations (called by HostedSidebar) ----------
+  async function createWorkspace(name: string) {
     const res = await fetch('/api/workspaces', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: newWorkspaceName, color: '#8b5cf6' }),
+      body: JSON.stringify({ name, color: '#8b5cf6' }),
     })
     if (!res.ok) {
       setErrorMessage('Failed to create workspace')
       return
     }
-    setNewWorkspaceName('')
     await loadWorkspaces()
   }
 
-  async function updateWorkspace(id: string) {
-    if (!editingWorkspaceName.trim()) return
+  async function renameWorkspace(id: string, name: string) {
     const res = await fetch(`/api/workspaces/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: editingWorkspaceName }),
+      body: JSON.stringify({ name }),
     })
     if (!res.ok) {
-      setErrorMessage('Failed to update workspace')
+      setErrorMessage('Failed to rename workspace')
       return
     }
-    setEditingWorkspaceId('')
-    setEditingWorkspaceName('')
     await loadWorkspaces()
   }
 
   async function deleteWorkspace(id: string) {
-    if (!confirm('Delete this workspace and all of its jobs?')) return
     const res = await fetch(`/api/workspaces/${id}`, { method: 'DELETE' })
     if (!res.ok) {
       setErrorMessage('Failed to delete workspace')
@@ -153,6 +142,31 @@ export function AppShell() {
     }
     if (selectedWorkspaceId === id) setSelectedWorkspaceId('')
     await refreshAll()
+  }
+
+  async function reorderWorkspaces(orderedIds: string[]) {
+    // Optimistic reorder — update the local state immediately so the
+    // sidebar shows the new order while the API call is in flight.
+    const prev = workspaces
+    const byId = new Map(prev.map((w) => [w.id, w]))
+    const reordered: Workspace[] = []
+    for (const id of orderedIds) {
+      const w = byId.get(id)
+      if (w) reordered.push(w)
+    }
+    // Re-stamp sortOrder so any other consumer reading w.sortOrder gets
+    // the new index without waiting for a refetch.
+    setWorkspaces(reordered.map((w, i) => ({ ...w, sortOrder: i })))
+
+    const res = await fetch('/api/workspaces/reorder', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ orderedIds }),
+    })
+    if (!res.ok) {
+      setWorkspaces(prev)
+      setErrorMessage('Failed to reorder workspaces')
+    }
   }
 
   // ---------- job mutations driven from kanban drag-drop ----------
@@ -213,6 +227,10 @@ export function AppShell() {
         workspaces={workspaces}
         selectedWorkspaceId={selectedWorkspaceId}
         onSelectWorkspace={setSelectedWorkspaceId}
+        onCreateWorkspace={createWorkspace}
+        onRenameWorkspace={renameWorkspace}
+        onDeleteWorkspace={deleteWorkspace}
+        onReorderWorkspaces={reorderWorkspaces}
       />
 
       <main className="flex-1 p-8 space-y-8">
@@ -266,102 +284,6 @@ export function AppShell() {
           setSort={setSort}
         />
 
-        {/* Workspace picker / management — kept from Round 1, lives below
-            the filter bar so the kanban is the visual focus of the page. */}
-        <section className="space-y-3">
-          <div className="flex items-center justify-between gap-4">
-            <h2 className="text-sm font-semibold uppercase tracking-wider text-[hsl(var(--muted-foreground))]">
-              Workspaces
-            </h2>
-            <div className="flex gap-2">
-              <input
-                className="rounded-lg border bg-transparent px-3 py-1.5 text-sm"
-                value={newWorkspaceName}
-                onChange={(e) => setNewWorkspaceName(e.target.value)}
-                placeholder="New workspace name"
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') void createWorkspace()
-                }}
-              />
-              <button
-                className="rounded-lg border px-3 py-1.5 text-sm"
-                onClick={createWorkspace}
-                disabled={!newWorkspaceName.trim()}
-              >
-                Add
-              </button>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap gap-3">
-            {workspaces.map((workspace) => (
-              <div
-                key={workspace.id}
-                className={`rounded-xl border px-4 py-3 min-w-56 ${
-                  selectedWorkspaceId === workspace.id
-                    ? 'bg-[hsl(var(--accent))] ring-1 ring-[hsl(var(--primary))]/40'
-                    : 'bg-[hsl(var(--card))]'
-                }`}
-              >
-                {editingWorkspaceId === workspace.id ? (
-                  <div className="space-y-2">
-                    <input
-                      className="w-full rounded-lg border bg-transparent px-3 py-2"
-                      value={editingWorkspaceName}
-                      onChange={(e) => setEditingWorkspaceName(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') void updateWorkspace(workspace.id)
-                      }}
-                    />
-                    <div className="flex gap-2">
-                      <button
-                        className="rounded-lg bg-[hsl(var(--primary))] px-3 py-2 text-[hsl(var(--primary-foreground))] text-sm font-semibold"
-                        onClick={() => updateWorkspace(workspace.id)}
-                      >
-                        Save
-                      </button>
-                      <button
-                        className="rounded-lg border px-3 py-2 text-sm"
-                        onClick={() => setEditingWorkspaceId('')}
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <>
-                    <button onClick={() => setSelectedWorkspaceId(workspace.id)} className="w-full text-left">
-                      <div className="flex items-center gap-3">
-                        <span
-                          className="h-3 w-3 rounded-full"
-                          style={{ backgroundColor: workspace.color }}
-                        />
-                        <span className="font-medium">{workspace.name}</span>
-                      </div>
-                    </button>
-                    <div className="flex gap-2 mt-3">
-                      <button
-                        className="text-xs text-[hsl(var(--primary))]"
-                        onClick={() => {
-                          setEditingWorkspaceId(workspace.id)
-                          setEditingWorkspaceName(workspace.name)
-                        }}
-                      >
-                        Edit
-                      </button>
-                      <button
-                        className="text-xs text-red-400"
-                        onClick={() => deleteWorkspace(workspace.id)}
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </>
-                )}
-              </div>
-            ))}
-          </div>
-        </section>
 
         {/* Kanban / list view */}
         <section className="space-y-4">
