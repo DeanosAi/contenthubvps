@@ -10,7 +10,6 @@
   },
   "dependencies": {
     "@hello-pangea/dnd": "^18.0.1",
-    "@prisma/client": "^7.8.0",
     "bcryptjs": "^3.0.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -18,7 +17,6 @@
     "lucide-react": "^1.11.0",
     "next": "16.2.4",
     "pg": "^8.20.0",
-    "prisma": "^7.8.0",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "tailwind-merge": "^3.5.0",
