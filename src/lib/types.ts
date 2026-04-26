@@ -132,6 +132,7 @@ export type SettingKey =
   | 'jobs.defaultStage'
   | 'jobs.defaultSort'
   | 'jobs.archivedVisibility'
+  | 'apify.token'
 
 export interface AppSetting {
   key: SettingKey

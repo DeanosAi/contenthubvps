@@ -12,6 +12,7 @@ const ALLOWED_KEYS = [
   'jobs.defaultStage',
   'jobs.defaultSort',
   'jobs.archivedVisibility',
+  'apify.token',
 ] as const
 
 const UpdateSettingInput = z.object({

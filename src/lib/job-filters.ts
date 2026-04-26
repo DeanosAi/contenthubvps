@@ -4,7 +4,7 @@
 //
 // All inputs are immutable — these never mutate the input array.
 
-import type { Job, JobStage } from './types'
+import type { ApprovalStatus, Job, JobStage } from './types'
 
 export type SortKey =
   | 'newest'
@@ -25,6 +25,10 @@ export interface JobFilterState {
   /** When true, jobs in the `archive` stage are hidden unless `stage === 'archive'`. */
   hideArchived: boolean
   assignedTo: string | ''
+  /** Approval status filter. Empty string = no filter. Added in Round 5
+   * so the dashboard "Awaiting approval" widget can apply a precise
+   * filter rather than just clearing all filters. */
+  approvalStatus: ApprovalStatus | ''
 }
 
 export const DEFAULT_FILTER_STATE: JobFilterState = {
@@ -36,6 +40,7 @@ export const DEFAULT_FILTER_STATE: JobFilterState = {
   dueTo: null,
   hideArchived: true,
   assignedTo: '',
+  approvalStatus: '',
 }
 
 /** Lower bound of a date filter — start of day in local time, returned as ms. */
@@ -77,6 +82,7 @@ export function applyJobFilters(jobs: Job[], filter: JobFilterState): Job[] {
     if (filter.platform && job.platform !== filter.platform) return false
     if (filter.priorityMin != null && job.priority < filter.priorityMin) return false
     if (filter.assignedTo && job.assignedTo !== filter.assignedTo) return false
+    if (filter.approvalStatus && job.approvalStatus !== filter.approvalStatus) return false
 
     if (fromMs != null || toMs != null) {
       if (!job.dueDate) return false
@@ -144,6 +150,7 @@ export function hasActiveFilters(filter: JobFilterState): boolean {
     filter.priorityMin != null ||
     filter.dueFrom != null ||
     filter.dueTo != null ||
-    filter.assignedTo !== ''
+    filter.assignedTo !== '' ||
+    filter.approvalStatus !== ''
   )
 }

@@ -36,6 +36,13 @@ export function AppShell() {
   // ---------- create-dialog state ----------
   const [createOpen, setCreateOpen] = useState(false)
 
+  // ---------- batch-refresh state ----------
+  /** When non-null, a workspace-wide metrics refresh is in progress.
+   * `done` and `total` drive the progress UI in the header button. */
+  const [refreshState, setRefreshState] = useState<
+    { done: number; total: number; failures: number } | null
+  >(null)
+
   // ---------- async UX ----------
   const [loading, setLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
@@ -207,6 +214,91 @@ export function AppShell() {
     }
   }
 
+  /**
+   * Refresh metrics for every posted job in the current workspace.
+   *
+   * Strategy: client-driven serial loop calling /api/jobs/:id/fetch-metrics
+   * one job at a time. Why serial rather than parallel:
+   *   - Apify charges per actor run regardless of concurrency, so there's
+   *     no cost reason to parallelise.
+   *   - Some Apify accounts have low concurrency limits — running 10 in
+   *     parallel would queue most of them anyway.
+   *   - Serial gives clean progress reporting: "12 of 47" feels right.
+   *   - One failure doesn't poison the batch — we record the failure and
+   *     continue.
+   *
+   * The user can navigate away mid-run; the loop checks the cancellation
+   * flag between requests and exits cleanly. Already-completed snapshots
+   * are kept (they were committed atomically), so partial progress isn't
+   * lost.
+   */
+  async function refreshWorkspaceMetrics() {
+    if (!selectedWorkspaceId) return
+    if (refreshState) return // already running
+
+    // Only posted jobs with a fetchable URL are eligible.
+    const eligible = jobs.filter(
+      (j) =>
+        j.workspaceId === selectedWorkspaceId &&
+        j.stage === 'posted' &&
+        (j.facebookLiveUrl || j.instagramLiveUrl || j.liveUrl),
+    )
+    if (eligible.length === 0) {
+      setErrorMessage(
+        'No posted jobs with live URLs to refresh in this workspace.',
+      )
+      return
+    }
+    if (
+      !confirm(
+        `Refresh metrics for ${eligible.length} ${
+          eligible.length === 1 ? 'job' : 'jobs'
+        }? This may take a few minutes; you can keep using the app while it runs.`,
+      )
+    ) {
+      return
+    }
+
+    setRefreshState({ done: 0, total: eligible.length, failures: 0 })
+    let failures = 0
+    for (let i = 0; i < eligible.length; i++) {
+      const job = eligible[i]
+      try {
+        const res = await fetch(`/api/jobs/${job.id}/fetch-metrics`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
+        })
+        if (res.ok) {
+          const data = (await res.json().catch(() => null)) as
+            | { job?: Job }
+            | null
+          if (data?.job) {
+            const updated = data.job
+            setJobs((js) => js.map((j) => (j.id === updated.id ? updated : j)))
+          }
+        } else {
+          failures++
+        }
+      } catch {
+        failures++
+      }
+      setRefreshState({ done: i + 1, total: eligible.length, failures })
+    }
+
+    // Surface a one-line summary.
+    if (failures > 0) {
+      setErrorMessage(
+        `Refresh finished with ${failures} ${
+          failures === 1 ? 'failure' : 'failures'
+        }. Open individual jobs to retry.`,
+      )
+    }
+    // Clear the in-progress state after a brief delay so the user can
+    // see the final "47 of 47" before it disappears.
+    setTimeout(() => setRefreshState(null), 1500)
+  }
+
   async function logout() {
     await fetch('/api/auth/logout', { method: 'POST' })
     window.location.href = '/login'
@@ -260,11 +352,14 @@ export function AppShell() {
         setSort('dueDateAsc')
         break
       case 'awaitingApproval':
-        // No first-class approval filter on JobFilterState yet — the user
-        // will see ALL non-archived jobs and we rely on them eyeballing
-        // the approval column. This is honest about the current limit.
-        // A future round can add `approvalStatus` to JobFilterState.
-        setFilter({ ...DEFAULT_FILTER_STATE, hideArchived: true })
+        // Round 5 adds a first-class approvalStatus field on JobFilterState,
+        // so this widget now applies a precise filter rather than just
+        // clearing all filters.
+        setFilter({
+          ...DEFAULT_FILTER_STATE,
+          approvalStatus: 'awaiting',
+          hideArchived: true,
+        })
         setSort('newest')
         break
       case 'recentlyPosted':
@@ -344,7 +439,7 @@ export function AppShell() {
                 : 'Select or create a workspace to manage content jobs.'}
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <button
               className="rounded-lg bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] font-semibold px-4 py-2 text-sm disabled:opacity-50"
               onClick={() => setCreateOpen(true)}
@@ -352,6 +447,20 @@ export function AppShell() {
               title={!selectedWorkspaceId ? 'Select a workspace first' : undefined}
             >
               + New job
+            </button>
+            <button
+              className="rounded-lg border border-[hsl(var(--border))] px-4 py-2 text-sm disabled:opacity-50"
+              onClick={refreshWorkspaceMetrics}
+              disabled={!selectedWorkspaceId || refreshState != null}
+              title={
+                !selectedWorkspaceId
+                  ? 'Select a workspace first'
+                  : 'Fetch latest metrics from Apify for every posted job in this workspace'
+              }
+            >
+              {refreshState
+                ? `Refreshing ${refreshState.done}/${refreshState.total}…`
+                : 'Refresh metrics'}
             </button>
             <button
               className="rounded-lg border border-[hsl(var(--border))] px-4 py-2 text-sm text-[hsl(var(--foreground))]"

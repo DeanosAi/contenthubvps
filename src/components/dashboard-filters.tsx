@@ -2,7 +2,7 @@
 
 import type { JobFilterState, SortKey } from '@/lib/job-filters'
 import { DEFAULT_FILTER_STATE, hasActiveFilters } from '@/lib/job-filters'
-import type { JobStage } from '@/lib/types'
+import type { ApprovalStatus, JobStage } from '@/lib/types'
 
 const STAGES: { id: JobStage; label: string }[] = [
   { id: 'brief', label: 'Brief' },
@@ -13,6 +13,13 @@ const STAGES: { id: JobStage; label: string }[] = [
 ]
 
 const PLATFORMS = ['instagram', 'facebook', 'tiktok', 'youtube']
+
+const APPROVAL_OPTIONS: { value: ApprovalStatus; label: string }[] = [
+  { value: 'none', label: 'No approval needed' },
+  { value: 'awaiting', label: 'Awaiting approval' },
+  { value: 'approved', label: 'Approved' },
+  { value: 'changes_requested', label: 'Changes requested' },
+]
 
 const SORT_OPTIONS: { value: SortKey; label: string }[] = [
   { value: 'newest', label: 'Newest first' },
@@ -87,7 +94,7 @@ export function DashboardFilters({
         </select>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3 items-end">
         <label className="flex flex-col gap-1 text-xs text-[hsl(var(--muted-foreground))]">
           Min priority
           <select
@@ -101,6 +108,26 @@ export function DashboardFilters({
             {[1, 2, 3, 4, 5].map((n) => (
               <option key={n} value={n}>
                 P{n}+
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="flex flex-col gap-1 text-xs text-[hsl(var(--muted-foreground))]">
+          Approval
+          <select
+            className="rounded-lg border bg-transparent px-3 py-2 text-sm"
+            value={filter.approvalStatus}
+            onChange={(e) =>
+              patch({
+                approvalStatus: (e.target.value || '') as JobFilterState['approvalStatus'],
+              })
+            }
+          >
+            <option value="">Any approval</option>
+            {APPROVAL_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
               </option>
             ))}
           </select>

@@ -70,6 +70,11 @@ export function JobDetailPanel({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [dirty, setDirty] = useState(false)
+  // Metric fetch is a separate concern from save — its busy/error state
+  // shouldn't block other edits, and an Apify failure shouldn't look
+  // like a "couldn't save" failure.
+  const [metricsBusy, setMetricsBusy] = useState(false)
+  const [metricsError, setMetricsError] = useState<string | null>(null)
 
   useEffect(() => {
     setForm(job)
@@ -126,6 +131,42 @@ export function JobDetailPanel({
       return
     }
     setDirty(false)
+    onSaved((data.job as Job) ?? form)
+  }
+
+  /** Trigger a live metric fetch via Apify. Synchronous from the user's
+   * perspective — request blocks until Apify finishes (~10-30s). On
+   * success the parent's onSaved updates the job state, which through
+   * the useEffect[job] above re-syncs `form` with the new live cache.
+   *
+   * If the user has unsaved edits in `form`, we DON'T want to clobber
+   * those. We block the fetch in that case and ask them to save first. */
+  async function fetchMetrics() {
+    if (!form) return
+    if (dirty) {
+      setMetricsError('Save your changes before fetching metrics.')
+      return
+    }
+    setMetricsBusy(true)
+    setMetricsError(null)
+    let res: Response
+    try {
+      res = await fetch(`/api/jobs/${form.id}/fetch-metrics`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      })
+    } catch {
+      setMetricsBusy(false)
+      setMetricsError('Network error — please try again.')
+      return
+    }
+    const data = await res.json().catch(() => ({}))
+    setMetricsBusy(false)
+    if (!res.ok) {
+      setMetricsError(data?.error || 'Failed to fetch metrics')
+      return
+    }
     onSaved((data.job as Job) ?? form)
   }
 
@@ -368,6 +409,69 @@ export function JobDetailPanel({
           </div>
         </section>
 
+        {/* Section: live metrics — only meaningful for posted jobs with a URL.
+            Pulls from Apify on demand; requires the apify.token setting. */}
+        <section className="space-y-3">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-[hsl(var(--muted-foreground))]">
+              Live metrics
+            </h3>
+            <button
+              type="button"
+              onClick={fetchMetrics}
+              disabled={
+                metricsBusy ||
+                form.stage !== 'posted' ||
+                !(form.facebookLiveUrl || form.instagramLiveUrl || form.liveUrl)
+              }
+              className="rounded-lg bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] font-semibold px-3 py-1.5 text-xs disabled:opacity-50"
+              title={
+                form.stage !== 'posted'
+                  ? 'Move the job to Posted to enable metric fetching'
+                  : !(form.facebookLiveUrl || form.instagramLiveUrl || form.liveUrl)
+                  ? 'Add a Facebook or Instagram URL above first'
+                  : 'Fetch metrics from Apify'
+              }
+            >
+              {metricsBusy ? 'Fetching…' : 'Fetch metrics'}
+            </button>
+          </div>
+
+          {metricsError && (
+            <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-200">
+              {metricsError}
+            </div>
+          )}
+
+          {form.liveMetrics ? (
+            <div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <MetricTile label="Views" value={form.liveMetrics.views} />
+                <MetricTile label="Likes" value={form.liveMetrics.likes} />
+                <MetricTile label="Comments" value={form.liveMetrics.comments} />
+                <MetricTile label="Shares" value={form.liveMetrics.shares} />
+              </div>
+              {form.liveMetrics.engagementRate != null && (
+                <p className="text-[11px] text-[hsl(var(--muted-foreground))] mt-2">
+                  Engagement rate:{' '}
+                  <span className="text-[hsl(var(--foreground))] font-medium">
+                    {(form.liveMetrics.engagementRate * 100).toFixed(2)}%
+                  </span>
+                </p>
+              )}
+              <p className="text-[11px] text-[hsl(var(--muted-foreground))] mt-1">
+                Last fetched: {formatStamp(form.lastMetricsFetchAt)}
+              </p>
+            </div>
+          ) : (
+            <p className="text-xs text-[hsl(var(--muted-foreground))]">
+              {form.stage === 'posted'
+                ? 'No metrics fetched yet. Click "Fetch metrics" once a Facebook or Instagram URL is set.'
+                : 'Metrics become available once the job is moved to Posted and a public URL is added.'}
+            </p>
+          )}
+        </section>
+
         {/* Section: custom fields */}
         <section>
           <h3 className="text-xs font-semibold uppercase tracking-wider text-[hsl(var(--muted-foreground))] mb-2">Custom fields</h3>
@@ -415,6 +519,22 @@ export function JobDetailPanel({
           </button>
         </div>
       </div>
+    </div>
+  )
+}
+
+/** Small tile used inside the Live metrics section. Null values render
+ * "—" rather than 0 — "no data" and "zero engagement" are different
+ * stories and shouldn't look the same. */
+function MetricTile({ label, value }: { label: string; value: number | null }) {
+  return (
+    <div className="rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--background))] p-2">
+      <p className="text-[10px] uppercase tracking-wider text-[hsl(var(--muted-foreground))]">
+        {label}
+      </p>
+      <p className="text-base font-semibold mt-0.5">
+        {value == null ? '—' : value.toLocaleString()}
+      </p>
     </div>
   )
 }

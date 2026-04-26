@@ -36,6 +36,7 @@ const SETTING_KEYS: SettingKey[] = [
   'jobs.defaultStage',
   'jobs.defaultSort',
   'jobs.archivedVisibility',
+  'apify.token',
 ]
 
 export function SettingsShell() {
@@ -368,6 +369,46 @@ export function SettingsShell() {
               onChange={(v) => patchSetting('app.accentColor', v)}
               disabled={!isAdmin}
             />
+          </div>
+        </section>
+
+        {/* ---- Integrations ---- */}
+        <section className="rounded-2xl border bg-[hsl(var(--card))] p-5 space-y-4">
+          <div>
+            <h2 className="text-sm font-semibold">Integrations</h2>
+            <p className="text-xs text-[hsl(var(--muted-foreground))] mt-1">
+              Third-party services Content Hub talks to on your behalf. Tokens
+              are stored on the server only and never sent to the browser
+              after they're saved.
+            </p>
+          </div>
+          <div className="space-y-3">
+            <SettingInput
+              label="Apify token"
+              value={settings['apify.token'] ?? ''}
+              onChange={(v) => patchSetting('apify.token', v || null)}
+              placeholder={
+                isAdmin
+                  ? 'apify_api_…'
+                  : 'Hidden — only admins can view'
+              }
+              type="text"
+              disabled={!isAdmin}
+            />
+            <p className="text-[11px] text-[hsl(var(--muted-foreground))]">
+              Used by the metric fetcher to scrape Facebook and Instagram post
+              metrics on demand. Get one at{' '}
+              <a
+                href="https://console.apify.com/account/integrations"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline text-[hsl(var(--primary))]"
+              >
+                console.apify.com → Integrations
+              </a>
+              . Without a token, the "Fetch metrics" buttons on posted jobs
+              show an error and reports remain empty.
+            </p>
           </div>
         </section>
 
