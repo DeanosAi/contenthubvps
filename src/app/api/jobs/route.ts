@@ -30,13 +30,7 @@ const CreateJobInput = z.object({
   contentType: z.string().nullable().optional(),
   briefUrl: z.string().nullable().optional(),
   assetLinks: z
-    .array(
-      z.object({
-        id: z.string(),
-        label: z.string(),
-        url: z.string(),
-      })
-    )
+    .array(z.object({ id: z.string(), label: z.string(), url: z.string() }))
     .optional(),
   customFields: z.array(CustomFieldSchema).optional(),
   approvalStatus: z.enum(APPROVAL).optional(),
@@ -45,17 +39,19 @@ const CreateJobInput = z.object({
   instagramLiveUrl: z.string().nullable().optional(),
 })
 
+// Includes Round 4.1 additions: posted_at, live_metrics_json, last_metrics_fetch_at.
 const COLUMN_LIST = `
   id, workspace_id, title, description, stage, priority, due_date,
   hashtags, platform, live_url, notes,
   content_type, brief_url, asset_links_json, approval_status, assigned_to,
   custom_fields_json,
   facebook_live_url, facebook_post_id, instagram_live_url,
+  posted_at, live_metrics_json, last_metrics_fetch_at,
   created_at, updated_at
 `
 
 /** GET /api/jobs?workspaceId=... — list jobs, optionally filtered to a
- * single workspace. Workspace filter is the common UI case. */
+ * single workspace. */
 export async function GET(req: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -101,19 +97,27 @@ export async function POST(req: NextRequest) {
   const id = randomUUID()
   const dueDate = parsed.data.dueDate ? new Date(parsed.data.dueDate) : null
 
+  // If the new job is being created already at stage='posted' (rare but
+  // possible when imported / backfilled), stamp posted_at = NOW() so it
+  // shows up in date-range reports immediately. PATCH does the same on
+  // stage transitions for normal flow.
+  const postedAt = parsed.data.stage === 'posted' ? new Date() : null
+
   await pool.query(
     `INSERT INTO jobs (
       id, workspace_id, title, description, stage, priority, due_date,
       hashtags, platform, live_url, notes,
       content_type, brief_url, asset_links_json, approval_status, assigned_to,
       custom_fields_json,
-      facebook_live_url, instagram_live_url
+      facebook_live_url, instagram_live_url,
+      posted_at
     ) VALUES (
       $1, $2, $3, $4, $5, $6, $7,
       $8, $9, $10, $11,
       $12, $13, $14, $15, $16,
       $17,
-      $18, $19
+      $18, $19,
+      $20
     )`,
     [
       id,
@@ -135,6 +139,7 @@ export async function POST(req: NextRequest) {
       parsed.data.customFields ? JSON.stringify(parsed.data.customFields) : null,
       parsed.data.facebookLiveUrl ?? null,
       parsed.data.instagramLiveUrl ?? null,
+      postedAt,
     ]
   )
 

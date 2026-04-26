@@ -1,13 +1,6 @@
 // Single place that converts raw Postgres rows (snake_case columns,
 // JSONB columns as already-parsed objects) into the camelCase domain
 // types the rest of the app uses.
-//
-// Why this exists: previously app-shell.tsx mapped row → Job and
-// row → Workspace inline at every call site. That pattern doesn't
-// survive new fields being added — every consumer has to be updated
-// in lockstep. Centralizing here means a new column added to the
-// `jobs` table only needs to be wired up in one mapper plus the
-// schema bootstrap.
 
 import type {
   AssetLink,
@@ -15,6 +8,8 @@ import type {
   CustomField,
   CustomFieldType,
   Job,
+  LiveMetrics,
+  MetricSnapshot,
   User,
   Workspace,
   AppSetting,
@@ -42,6 +37,18 @@ function asNumber(v: unknown, fallback = 0): number {
   return fallback
 }
 
+/** Like asNumber but null-passthrough — for nullable integer columns
+ * (views, likes, etc.) where "no data" is meaningfully different from "0". */
+function asNullableNumber(v: unknown): number | null {
+  if (v == null) return null
+  if (typeof v === 'number') return Number.isFinite(v) ? v : null
+  if (typeof v === 'string' && v.length > 0) {
+    const n = Number(v)
+    return Number.isFinite(n) ? n : null
+  }
+  return null
+}
+
 function asIsoString(v: unknown): string {
   if (v == null) return ''
   if (v instanceof Date) return v.toISOString()
@@ -56,8 +63,7 @@ function asNullableIsoString(v: unknown): string | null {
 }
 
 /** Postgres `jsonb` columns come back as already-parsed objects, but we
- * defensively also handle null and string (just in case the column was
- * stored as TEXT during an older deploy). */
+ * defensively also handle null and string. */
 function parseJson<T>(v: unknown, fallback: T): T {
   if (v == null) return fallback
   if (typeof v === 'string') {
@@ -101,8 +107,6 @@ function mapCustomFields(raw: unknown): CustomField[] {
         value: asString(item.value),
       }
     })
-    // Drop entries where the user gave it neither a label nor a value —
-    // they're noise from a half-typed addition that wasn't filled in.
     .filter((cf) => cf.label.length > 0 || cf.value.length > 0)
 }
 
@@ -110,6 +114,30 @@ function mapApprovalStatus(v: unknown): ApprovalStatus {
   const allowed: ApprovalStatus[] = ['none', 'awaiting', 'approved', 'changes_requested']
   const s = String(v ?? 'none')
   return (allowed as string[]).includes(s) ? (s as ApprovalStatus) : 'none'
+}
+
+/** Coerce a raw `live_metrics_json` blob into the typed LiveMetrics shape.
+ * Tolerant: missing fields become null. Returns null if the input is null
+ * or an empty object. */
+export function mapLiveMetrics(raw: unknown): LiveMetrics | null {
+  const parsed = parseJson<Record<string, unknown> | null>(raw, null)
+  if (!parsed || typeof parsed !== 'object') return null
+  // Reject empty objects so the API doesn't return `liveMetrics: {everything null}`
+  // when the column was just initialised with `{}`.
+  const m: LiveMetrics = {
+    views: asNullableNumber(parsed.views),
+    likes: asNullableNumber(parsed.likes),
+    comments: asNullableNumber(parsed.comments),
+    shares: asNullableNumber(parsed.shares),
+    saves: asNullableNumber(parsed.saves),
+    reach: asNullableNumber(parsed.reach),
+    impressions: asNullableNumber(parsed.impressions),
+    engagementRate: asNullableNumber(parsed.engagementRate ?? parsed.engagement_rate),
+  }
+  // If every field is null, return null instead — saves callers from
+  // having to check `if (m && Object.values(m).some(v => v != null))`.
+  if (Object.values(m).every((v) => v == null)) return null
+  return m
 }
 
 export function rowToUser(row: Row): User {
@@ -163,8 +191,32 @@ export function rowToJob(row: Row): Job {
     facebookLiveUrl: asNullableString(row.facebook_live_url),
     facebookPostId: asNullableString(row.facebook_post_id),
     instagramLiveUrl: asNullableString(row.instagram_live_url),
+    postedAt: asNullableIsoString(row.posted_at),
+    liveMetrics: mapLiveMetrics(row.live_metrics_json),
+    lastMetricsFetchAt: asNullableIsoString(row.last_metrics_fetch_at),
     createdAt: asIsoString(row.created_at),
     updatedAt: asIsoString(row.updated_at),
+  }
+}
+
+/** Map a raw `metric_snapshots` row into the API-shaped MetricSnapshot. */
+export function rowToMetricSnapshot(row: Row): MetricSnapshot {
+  return {
+    id: asString(row.id),
+    jobId: asString(row.job_id),
+    workspaceId: asString(row.workspace_id),
+    platform: asNullableString(row.platform),
+    capturedAt: asIsoString(row.captured_at),
+    metrics: {
+      views: asNullableNumber(row.views),
+      likes: asNullableNumber(row.likes),
+      comments: asNullableNumber(row.comments),
+      shares: asNullableNumber(row.shares),
+      saves: asNullableNumber(row.saves),
+      reach: asNullableNumber(row.reach),
+      impressions: asNullableNumber(row.impressions),
+      engagementRate: asNullableNumber(row.engagement_rate),
+    },
   }
 }
 

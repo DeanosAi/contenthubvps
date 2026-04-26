@@ -45,6 +45,7 @@ const COLUMN_LIST = `
   content_type, brief_url, asset_links_json, approval_status, assigned_to,
   custom_fields_json,
   facebook_live_url, facebook_post_id, instagram_live_url,
+  posted_at, live_metrics_json, last_metrics_fetch_at,
   created_at, updated_at
 `
 
@@ -95,25 +96,56 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   await ensureSchema()
 
-  const sets: string[] = []
-  const values: unknown[] = []
-  let n = 1
-  for (const [k, v] of Object.entries(parsed.data)) {
-    const col = COLUMN_MAP[k]
-    if (!col) continue
-    sets.push(`${col} = $${n++}`)
-    if (k === 'dueDate') {
-      values.push(v ? new Date(v as string) : null)
-    } else if (JSONB_KEYS.has(k)) {
-      values.push(v == null ? null : JSON.stringify(v))
-    } else {
-      values.push(v)
-    }
-  }
-  sets.push(`updated_at = NOW()`)
-  values.push(id)
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
 
-  await pool.query(`UPDATE jobs SET ${sets.join(', ')} WHERE id = $${n}`, values)
+    const before = await client.query<{ stage: string; posted_at: Date | null }>(
+      'SELECT stage, posted_at FROM jobs WHERE id = $1 FOR UPDATE',
+      [id]
+    )
+    if (before.rows.length === 0) {
+      await client.query('ROLLBACK')
+      return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    }
+    const oldStage = before.rows[0].stage
+    const oldPostedAt = before.rows[0].posted_at
+
+    const sets: string[] = []
+    const values: unknown[] = []
+    let n = 1
+    for (const [k, v] of Object.entries(parsed.data)) {
+      const col = COLUMN_MAP[k]
+      if (!col) continue
+      sets.push(`${col} = $${n++}`)
+      if (k === 'dueDate') {
+        values.push(v ? new Date(v as string) : null)
+      } else if (JSONB_KEYS.has(k)) {
+        values.push(v == null ? null : JSON.stringify(v))
+      } else {
+        values.push(v)
+      }
+    }
+
+    if (parsed.data.stage !== undefined && parsed.data.stage !== oldStage) {
+      if (parsed.data.stage === 'posted' && oldPostedAt == null) {
+        sets.push(`posted_at = NOW()`)
+      } else if (parsed.data.stage !== 'posted') {
+        sets.push(`posted_at = NULL`)
+      }
+    }
+
+    sets.push(`updated_at = NOW()`)
+    values.push(id)
+
+    await client.query(`UPDATE jobs SET ${sets.join(', ')} WHERE id = $${n}`, values)
+    await client.query('COMMIT')
+  } catch (err) {
+    await client.query('ROLLBACK')
+    throw err
+  } finally {
+    client.release()
+  }
 
   const result = await pool.query(`SELECT ${COLUMN_LIST} FROM jobs WHERE id = $1`, [id])
   if (result.rows.length === 0) return NextResponse.json({ error: 'Not found' }, { status: 404 })

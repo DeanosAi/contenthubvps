@@ -24,19 +24,45 @@ export interface AssetLink {
  * render the right input control for each. */
 export type CustomFieldType = 'text' | 'textarea' | 'number' | 'date' | 'url'
 
-/** A user-defined extra field on a job. Briefs/clients sometimes need
- * one-off fields — campaign code, vendor reference, target audience, etc.
- * Rather than adding a column for each, jobs carry an array of these. */
+/** A user-defined extra field on a job. */
 export interface CustomField {
-  /** Stable id within the job — used as React keys and for delete-by-id. */
   id: string
-  /** Display name shown next to the input. */
   label: string
-  /** Determines the input control rendered. */
   type: CustomFieldType
-  /** Always serialised as a string in the DB. The UI is responsible for
-   * coercing on save (e.g. number inputs validate before submit). */
   value: string
+}
+
+/** A point-in-time set of social-media metrics for a job. Used both as the
+ * latest cached state on `Job.liveMetrics` and as the historical record in
+ * `MetricSnapshot.metrics`.
+ *
+ * All numeric fields are nullable because not every platform reports every
+ * metric — TikTok exposes views but not reach, Instagram exposes reach but
+ * not views, etc. The reports tolerate nulls. */
+export interface LiveMetrics {
+  views: number | null
+  likes: number | null
+  comments: number | null
+  shares: number | null
+  saves: number | null
+  reach: number | null
+  impressions: number | null
+  /** Engagement rate as a fraction (0.0234 = 2.34%). Stored that way to
+   * avoid double-converting back and forth. The UI formats with `* 100`. */
+  engagementRate: number | null
+}
+
+/** Append-only historical record of a metric fetch. Reports query these
+ * for trend analysis (month-over-month growth, etc). */
+export interface MetricSnapshot {
+  id: string
+  jobId: string
+  workspaceId: string
+  /** Which platform these metrics belong to. Null for combined / unknown. */
+  platform: string | null
+  /** ISO timestamp of when the snapshot was captured. */
+  capturedAt: string
+  metrics: LiveMetrics
 }
 
 export interface User {
@@ -72,19 +98,25 @@ export interface Job {
   platform: string | null
   liveUrl: string | null
   notes: string | null
-  // Hosted-safe extensions (Phase 1 brief)
   contentType: string | null
   briefUrl: string | null
   assetLinks: AssetLink[]
   approvalStatus: ApprovalStatus
   assignedTo: string | null
-  /** User-defined extra fields. See CustomField above. */
   customFields: CustomField[]
-  // Optional Facebook fields preserved from desktop app, used by metrics
-  // fetching paths added in later rounds.
   facebookLiveUrl: string | null
   facebookPostId: string | null
   instagramLiveUrl: string | null
+  /** Stable timestamp of when the stage moved to `posted`. Null while the
+   * job is still pre-post. Reports use this (not updatedAt or dueDate)
+   * for "posts in date range" calculations. */
+  postedAt: string | null
+  /** Latest cached metric values from the most recent Apify fetch. Null
+   * until the first fetch happens. The kanban card / detail panel read
+   * from here for at-a-glance display. */
+  liveMetrics: LiveMetrics | null
+  /** When `liveMetrics` was last refreshed. Null if never fetched. */
+  lastMetricsFetchAt: string | null
   createdAt: string
   updatedAt: string
 }

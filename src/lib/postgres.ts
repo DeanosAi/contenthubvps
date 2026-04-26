@@ -53,7 +53,6 @@ export async function ensureSchema(): Promise<void> {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
   `)
-  // Idempotent column adds for upgrades from the earlier minimal schema.
   await pool.query(`ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS facebook_page_url TEXT;`)
   await pool.query(`ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS instagram_page_url TEXT;`)
 
@@ -75,24 +74,86 @@ export async function ensureSchema(): Promise<void> {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
   `)
-  // Hosted-safe extensions called out in the brief.
+  // Hosted-safe extensions added in earlier rounds.
   await pool.query(`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS content_type TEXT;`)
   await pool.query(`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS brief_url TEXT;`)
   await pool.query(`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS asset_links_json JSONB;`)
   await pool.query(`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS approval_status TEXT NOT NULL DEFAULT 'none';`)
   await pool.query(`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS assigned_to TEXT;`)
-  // Per-platform metric URL fields and cached Facebook post id, so live
-  // metrics can ride on top in a later round without another schema bump.
   await pool.query(`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS facebook_live_url TEXT;`)
   await pool.query(`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS facebook_post_id TEXT;`)
   await pool.query(`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS instagram_live_url TEXT;`)
-  // Custom fields — user-defined per-job key/value pairs of the desktop-app
-  // form. Stored as a JSON array of {id, label, type, value} objects so that
-  // each job can have a different shape without rigid columns.
   await pool.query(`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS custom_fields_json JSONB;`)
 
+  // ---------- Round 4.1 additions ----------
+  // posted_at: stable timestamp of when a job's stage transitioned to
+  // 'posted'. Distinct from updated_at (which moves with any later edit)
+  // and from due_date (which is the planned date, not actual). Reports
+  // use this to compute "posts in date range".
+  await pool.query(`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS posted_at TIMESTAMPTZ;`)
+
+  // live_metrics_json: latest cached metric snapshot for at-a-glance
+  // display on cards / detail panel. Always reflects the most recent
+  // fetch. Historical values live in metric_snapshots (below).
+  await pool.query(`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS live_metrics_json JSONB;`)
+  // last_metrics_fetch_at: when the live_metrics_json was last refreshed.
+  // Used by the UI to show "fetched 3 hours ago" hints and by background
+  // jobs to decide when to re-fetch.
+  await pool.query(`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS last_metrics_fetch_at TIMESTAMPTZ;`)
+
+  // ---------- metric_snapshots ----------
+  // Append-only history of every metric fetch we record. One row per
+  // fetch per platform. Reports query this for trend analysis (month-
+  // over-month growth, engagement-rate over time, etc).
+  //
+  // Why we keep BOTH live_metrics_json on the job AND a snapshots table:
+  //   - jobs.live_metrics_json answers "what's the current state?" cheaply,
+  //     no JOIN needed for kanban cards.
+  //   - metric_snapshots answers "how did this evolve?" — slower per-row
+  //     but only relevant for reports.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS metric_snapshots (
+      id TEXT PRIMARY KEY,
+      job_id TEXT NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+      workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+      platform TEXT,
+      captured_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      views INTEGER,
+      likes INTEGER,
+      comments INTEGER,
+      shares INTEGER,
+      saves INTEGER,
+      reach INTEGER,
+      impressions INTEGER,
+      engagement_rate NUMERIC(8, 4),
+      raw_json JSONB
+    );
+  `)
+  // Reports filter heavily by workspace_id + captured_at range — this
+  // index makes those queries fast.
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS metric_snapshots_workspace_captured_idx
+    ON metric_snapshots (workspace_id, captured_at DESC);
+  `)
+  // Lookups for "all snapshots of this job" (used when rendering the
+  // metric history on the detail panel later).
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS metric_snapshots_job_captured_idx
+    ON metric_snapshots (job_id, captured_at DESC);
+  `)
+
+  // ---------- backfill posted_at for existing posted jobs ----------
+  // Jobs that are already in stage='posted' but predate this column
+  // would otherwise be invisible to date-range reports. We backfill
+  // their posted_at from updated_at as a one-time approximation. This
+  // runs once (subsequent calls are no-ops because posted_at IS NOT NULL).
+  await pool.query(`
+    UPDATE jobs
+    SET posted_at = updated_at
+    WHERE stage = 'posted' AND posted_at IS NULL;
+  `)
+
   // ---------- settings ----------
-  // Simple key-value store. Phase 6 (Settings/Branding) reads/writes here.
   await pool.query(`
     CREATE TABLE IF NOT EXISTS app_settings (
       key TEXT PRIMARY KEY,
@@ -103,10 +164,7 @@ export async function ensureSchema(): Promise<void> {
 
   // ---------- bootstrap admin ----------
   // If there are no users yet AND ADMIN_EMAIL/ADMIN_PASSWORD are present in
-  // the environment, create the first admin user from those values. This
-  // gives a safe upgrade path from the previous single-admin model: the
-  // operator's existing credentials become the seed for the new users
-  // table on first deploy after upgrade.
+  // the environment, create the first admin user from those values.
   const userCountRes = await pool.query<{ count: string }>('SELECT COUNT(*)::text AS count FROM users')
   const userCount = Number(userCountRes.rows[0]?.count ?? 0)
   if (userCount === 0) {
@@ -121,10 +179,6 @@ export async function ensureSchema(): Promise<void> {
          ON CONFLICT (email) DO NOTHING`,
         [id, seedEmail, hash, 'Admin']
       )
-
-      // Reassign any pre-existing workspaces (which were owned by the
-      // string 'admin' under the old single-admin model) to the new
-      // real user id, so they show up correctly under the new auth.
       await pool.query(
         `UPDATE workspaces SET owner_id = $1 WHERE owner_id IN ('admin', '')`,
         [id]
