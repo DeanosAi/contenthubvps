@@ -1,13 +1,20 @@
 "use client"
 
 import { useEffect, useMemo, useState } from 'react'
+import type { ReactElement } from 'react'
 import Link from 'next/link'
 import { HostedSidebar } from '@/components/hosted-sidebar'
 import { ReportsHeadline } from '@/components/reports-headline'
 import { ReportsCharts } from '@/components/reports-charts'
 import { ReportsPlatformTable } from '@/components/reports-platform-table'
 import { ReportsTopPosts } from '@/components/reports-top-posts'
+import { ReportsDeepDiveSummary } from '@/components/reports-deep-dive-summary'
+import { ReportsDeepDiveMonthlyChart } from '@/components/reports-deep-dive-monthly'
+import { ReportsDeepDivePlatformTable } from '@/components/reports-deep-dive-platforms'
+import { ReportsDeepDiveRecommendations } from '@/components/reports-deep-dive-recommendations'
 import type { Job, MetricSnapshot, Workspace } from '@/lib/types'
+import { buildDeepDive } from '@/lib/quarterly'
+import { generateRecommendations } from '@/lib/recommendations'
 import {
   buildDailyTimeSeries,
   computeHeadlineNumbers,
@@ -42,6 +49,11 @@ export function ReportsShell() {
   const [reportWorkspaceId, setReportWorkspaceId] = useState<string>('')
   const [fromIso, setFromIso] = useState<string>(initialRange.fromIso)
   const [toIso, setToIso] = useState<string>(initialRange.toIso)
+  /** Standard = the 4.2 layout (single window, simple numbers).
+   *  Deep dive = the 4.3 layout (current vs prior, monthly trends,
+   *  recommendations engine output). Both use the same /api/reports
+   *  data — only the body of the page changes. */
+  const [reportType, setReportType] = useState<'standard' | 'deepDive'>('standard')
 
   // ---------- report data ----------
   const [data, setData] = useState<ReportsApiResponse | null>(null)
@@ -219,45 +231,83 @@ export function ReportsShell() {
     [inScopeJobs, inScopeSnaps, scope],
   )
 
+  // ---------- deep-dive computations (only used when reportType === 'deepDive') ----------
+  // We compute these unconditionally so a toggle into deep-dive view is
+  // instant. The math is fast; no need to gate on reportType.
+  const deepDive = useMemo(
+    () => (data ? buildDeepDive(data.jobs, data.snapshots, scope) : null),
+    [data, scope],
+  )
+  const recommendations = useMemo(
+    () => (deepDive ? generateRecommendations(deepDive) : []),
+    [deepDive],
+  )
+
   // ---------- PDF download ----------
   /**
    * Lazy-load the PDF generator (and our PDF document component) only
    * when the user actually clicks Download. Avoids paying the
    * @react-pdf/renderer bundle cost on every reports-page visit.
+   *
+   * The downloaded PDF reflects the currently-selected report type:
+   * Standard → ReportPdf (4.2 layout)
+   * Deep-dive → DeepDivePdf (4.3 layout, ~4 pages, includes recommendations)
    */
   async function downloadPdf() {
     if (!data) return
     setPdfBusy(true)
     try {
-      const [{ pdf }, { ReportPdf }] = await Promise.all([
-        import('@react-pdf/renderer'),
-        import('@/components/report-pdf'),
-      ])
-
+      const { pdf } = await import('@react-pdf/renderer')
       const generatedAt = new Date()
-      const doc = (
-        <ReportPdf
-          appName="Content Hub"
-          companyName=""
-          workspace={data.workspace}
-          fromIso={fromIso}
-          toIso={toIso}
-          generatedAt={generatedAt}
-          headline={headline}
-          platformRows={platformRows}
-          topByPlatform={topByPlatform}
-        />
-      )
-      const blob = await pdf(doc).toBlob()
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
       const scopeName = data.workspace?.name || 'all-workspaces'
       const safeName = scopeName
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/^-|-$/g, '')
+
+      let doc: ReactElement
+      let filename: string
+
+      if (reportType === 'deepDive') {
+        if (!deepDive) {
+          setErrorMessage('Deep-dive data not ready yet. Try again in a moment.')
+          return
+        }
+        const { DeepDivePdf } = await import('@/components/report-deep-dive-pdf')
+        doc = (
+          <DeepDivePdf
+            appName="Content Hub"
+            companyName=""
+            workspace={data.workspace}
+            generatedAt={generatedAt}
+            deepDive={deepDive}
+            recommendations={recommendations}
+          />
+        )
+        filename = `deep-dive-${safeName}-${fromIso}-to-${toIso}.pdf`
+      } else {
+        const { ReportPdf } = await import('@/components/report-pdf')
+        doc = (
+          <ReportPdf
+            appName="Content Hub"
+            companyName=""
+            workspace={data.workspace}
+            fromIso={fromIso}
+            toIso={toIso}
+            generatedAt={generatedAt}
+            headline={headline}
+            platformRows={platformRows}
+            topByPlatform={topByPlatform}
+          />
+        )
+        filename = `report-${safeName}-${fromIso}-to-${toIso}.pdf`
+      }
+
+      const blob = await pdf(doc as Parameters<typeof pdf>[0]).toBlob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
       a.href = url
-      a.download = `report-${safeName}-${fromIso}-to-${toIso}.pdf`
+      a.download = filename
       document.body.appendChild(a)
       a.click()
       a.remove()
@@ -319,6 +369,32 @@ export function ReportsShell() {
             </button>
           </div>
         )}
+
+        {/* Report type pill toggle — Standard or Quarterly Deep-Dive. */}
+        <section className="flex items-center gap-3">
+          <span className="text-xs uppercase tracking-wider text-[hsl(var(--muted-foreground))]">
+            Report type
+          </span>
+          <div className="inline-flex items-center rounded-lg border border-[hsl(var(--border))] p-0.5 bg-[hsl(var(--card))]">
+            {([
+              { value: 'standard', label: 'Standard' },
+              { value: 'deepDive', label: 'Quarterly deep-dive' },
+            ] as const).map((t) => (
+              <button
+                key={t.value}
+                type="button"
+                onClick={() => setReportType(t.value)}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                  reportType === t.value
+                    ? 'bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]'
+                    : 'text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]'
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+        </section>
 
         {/* Report-specific filter bar — workspace + date range + PDF action */}
         <section className="rounded-2xl border bg-[hsl(var(--card))] p-4 flex flex-wrap items-end gap-4">
@@ -383,7 +459,7 @@ export function ReportsShell() {
           <div className="rounded-2xl border bg-[hsl(var(--card))] p-10 text-center text-sm text-[hsl(var(--muted-foreground))]">
             Loading report…
           </div>
-        ) : (
+        ) : reportType === 'standard' ? (
           <>
             <ReportsHeadline headline={headline} />
             <ReportsCharts series={series} platformRows={platformRows} />
@@ -402,6 +478,34 @@ export function ReportsShell() {
               <ReportsTopPosts byPlatform={topByPlatform} />
             </section>
           </>
+        ) : deepDive ? (
+          <>
+            <ReportsDeepDiveSummary deepDive={deepDive} />
+            <ReportsDeepDiveMonthlyChart monthly={deepDive.monthly} />
+
+            <section className="space-y-2">
+              <h2 className="text-sm font-semibold uppercase tracking-wider text-[hsl(var(--muted-foreground))]">
+                Platform comparison
+              </h2>
+              <ReportsDeepDivePlatformTable rows={deepDive.platforms} />
+            </section>
+
+            <section className="space-y-2">
+              <h2 className="text-sm font-semibold uppercase tracking-wider text-[hsl(var(--muted-foreground))]">
+                Recommendations{' '}
+                {recommendations.length > 0 && (
+                  <span className="ml-1 text-[hsl(var(--muted-foreground))] font-normal normal-case tracking-normal">
+                    ({recommendations.length} triggered)
+                  </span>
+                )}
+              </h2>
+              <ReportsDeepDiveRecommendations recommendations={recommendations} />
+            </section>
+          </>
+        ) : (
+          <div className="rounded-2xl border bg-[hsl(var(--card))] p-10 text-center text-sm text-[hsl(var(--muted-foreground))]">
+            Preparing deep-dive…
+          </div>
         )}
       </main>
     </div>
