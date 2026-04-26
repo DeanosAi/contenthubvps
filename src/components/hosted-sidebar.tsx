@@ -94,16 +94,8 @@ export function HostedSidebar({
         <nav className="space-y-1 text-sm">
           <SidebarLink href="/app" label="Dashboard" pathname={pathname} matchPrefix="/app" />
           <SidebarLink href="/calendar" label="Calendar" pathname={pathname} matchPrefix="/calendar" />
-          {/* Reports + Settings come in later rounds — kept visible but inert
-              so the layout doesn't shift when they go live. */}
-          <div className="rounded-md px-3 py-2 text-[hsl(var(--muted-foreground))] cursor-not-allowed">
-            Reports
-            <span className="ml-2 text-[10px] uppercase tracking-wider opacity-60">Soon</span>
-          </div>
-          <div className="rounded-md px-3 py-2 text-[hsl(var(--muted-foreground))] cursor-not-allowed">
-            Settings
-            <span className="ml-2 text-[10px] uppercase tracking-wider opacity-60">Soon</span>
-          </div>
+          <SidebarLink href="/reports" label="Reports" pathname={pathname} matchPrefix="/reports" />
+          <SidebarLink href="/settings" label="Settings" pathname={pathname} matchPrefix="/settings" />
         </nav>
       </div>
 
