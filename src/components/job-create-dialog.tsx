@@ -57,26 +57,40 @@ export function JobCreateDialog({
   onClose,
   workspaces,
   defaultWorkspaceId,
+  defaultDueDate = null,
   onCreated,
 }: {
   open: boolean
   onClose: () => void
   workspaces: Workspace[]
   defaultWorkspaceId: string
+  /** Pre-fill the due date field, e.g. when launched from a calendar
+   * day cell. Format: yyyy-mm-dd (local time ISO date). */
+  defaultDueDate?: string | null
   onCreated: (job: Job) => void
 }) {
   const { users } = useUsers()
-  const [draft, setDraft] = useState({ ...EMPTY_DRAFT, workspaceId: defaultWorkspaceId })
+  const [draft, setDraft] = useState({
+    ...EMPTY_DRAFT,
+    workspaceId: defaultWorkspaceId,
+    dueDate: defaultDueDate,
+  })
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // Reset form whenever the dialog re-opens.
+  // Reset form whenever the dialog re-opens. Critically: pick up any
+  // changes to defaultDueDate (the parent may pass a new date if the
+  // user clicked a different day before the dialog finished closing).
   useEffect(() => {
     if (open) {
-      setDraft({ ...EMPTY_DRAFT, workspaceId: defaultWorkspaceId })
+      setDraft({
+        ...EMPTY_DRAFT,
+        workspaceId: defaultWorkspaceId,
+        dueDate: defaultDueDate,
+      })
       setError(null)
     }
-  }, [open, defaultWorkspaceId])
+  }, [open, defaultWorkspaceId, defaultDueDate])
 
   // Close on Escape — small UX touch but expected from a modal.
   useEffect(() => {

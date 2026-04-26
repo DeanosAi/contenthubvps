@@ -1,6 +1,8 @@
 "use client"
 
 import { useState } from 'react'
+import Link from 'next/link'
+import { usePathname } from 'next/navigation'
 import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd'
 import type { Workspace } from '@/lib/types'
 
@@ -31,6 +33,7 @@ export function HostedSidebar({
    * /api/workspaces/reorder with this list. */
   onReorderWorkspaces: (orderedIds: string[]) => Promise<void>
 }) {
+  const pathname = usePathname()
   const [editingId, setEditingId] = useState<string>('')
   const [editingName, setEditingName] = useState('')
   const [newName, setNewName] = useState('')
@@ -88,11 +91,19 @@ export function HostedSidebar({
       </div>
 
       <div className="p-4 border-b">
-        <nav className="space-y-2 text-sm">
-          <div className="rounded-md bg-[hsl(var(--accent))] px-3 py-2">Dashboard</div>
-          <div className="rounded-md px-3 py-2 text-[hsl(var(--muted-foreground))]">Calendar</div>
-          <div className="rounded-md px-3 py-2 text-[hsl(var(--muted-foreground))]">Reports</div>
-          <div className="rounded-md px-3 py-2 text-[hsl(var(--muted-foreground))]">Settings</div>
+        <nav className="space-y-1 text-sm">
+          <SidebarLink href="/app" label="Dashboard" pathname={pathname} matchPrefix="/app" />
+          <SidebarLink href="/calendar" label="Calendar" pathname={pathname} matchPrefix="/calendar" />
+          {/* Reports + Settings come in later rounds — kept visible but inert
+              so the layout doesn't shift when they go live. */}
+          <div className="rounded-md px-3 py-2 text-[hsl(var(--muted-foreground))] cursor-not-allowed">
+            Reports
+            <span className="ml-2 text-[10px] uppercase tracking-wider opacity-60">Soon</span>
+          </div>
+          <div className="rounded-md px-3 py-2 text-[hsl(var(--muted-foreground))] cursor-not-allowed">
+            Settings
+            <span className="ml-2 text-[10px] uppercase tracking-wider opacity-60">Soon</span>
+          </div>
         </nav>
       </div>
 
@@ -223,5 +234,35 @@ export function HostedSidebar({
         </div>
       </div>
     </aside>
+  )
+}
+
+/** Navigation link that renders active styling when the current pathname
+ * matches `matchPrefix`. Pulled out of the JSX so the nav stays scannable. */
+function SidebarLink({
+  href,
+  label,
+  pathname,
+  matchPrefix,
+}: {
+  href: string
+  label: string
+  pathname: string | null
+  matchPrefix: string
+}) {
+  const isActive =
+    pathname === matchPrefix ||
+    (pathname?.startsWith(matchPrefix + '/') ?? false)
+  return (
+    <Link
+      href={href}
+      className={`block rounded-md px-3 py-2 transition-colors ${
+        isActive
+          ? 'bg-[hsl(var(--accent))] text-[hsl(var(--accent-foreground))]'
+          : 'text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--accent))]/40 hover:text-[hsl(var(--foreground))]'
+      }`}
+    >
+      {label}
+    </Link>
   )
 }

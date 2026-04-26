@@ -5,7 +5,7 @@ import { KanbanBoard } from '@/components/kanban-board'
 import { JobListView } from '@/components/job-list-view'
 import { ViewToggle, type JobView } from '@/components/view-toggle'
 import { HostedSidebar } from '@/components/hosted-sidebar'
-import { DashboardStats } from '@/components/dashboard-stats'
+import { DashboardWidgets, type WidgetKey } from '@/components/dashboard-widgets'
 import { DashboardFilters } from '@/components/dashboard-filters'
 import { JobDetailPanel } from '@/components/job-detail-panel'
 import { JobCreateDialog } from '@/components/job-create-dialog'
@@ -28,6 +28,10 @@ export function AppShell() {
   const [view, setView] = useState<JobView>('kanban')
   const [filter, setFilter] = useState<JobFilterState>(DEFAULT_FILTER_STATE)
   const [sort, setSort] = useState<SortKey>('newest')
+  /** When a dashboard widget drives the filter, we record which one so the
+   * widget can render an "active" state. Setting filter via the filter bar
+   * directly clears this. */
+  const [activeWidget, setActiveWidget] = useState<WidgetKey | null>(null)
 
   // ---------- create-dialog state ----------
   const [createOpen, setCreateOpen] = useState(false)
@@ -208,6 +212,88 @@ export function AppShell() {
     window.location.href = '/login'
   }
 
+  /** Translate a dashboard widget click into a JobFilterState. Each widget
+   * corresponds to a filter preset:
+   *
+   *  - overdue: due before today, not posted/archived
+   *  - dueThisWeek: due in next 7 days, not posted/archived
+   *  - awaitingApproval: approval_status='awaiting'
+   *  - recentlyPosted: stage='posted', updated in last 7 days
+   *  - inFlight: not archived (this is the headline total — clears most filters)
+   *
+   * Some of these can't be expressed exactly with our current JobFilterState
+   * (e.g. "approvalStatus" isn't a top-level filter field). We approximate
+   * with the closest available controls — the kanban view will show the
+   * intended bucket plus possibly a few near-misses that the user can
+   * clear with the kanban filter bar. */
+  function applyWidgetFilter(key: WidgetKey | null) {
+    setActiveWidget(key)
+    if (key === null) {
+      setFilter(DEFAULT_FILTER_STATE)
+      setSort('newest')
+      return
+    }
+
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const todayIso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+    const inSevenDays = new Date(today)
+    inSevenDays.setDate(today.getDate() + 7)
+    const inSevenIso = `${inSevenDays.getFullYear()}-${String(inSevenDays.getMonth() + 1).padStart(2, '0')}-${String(inSevenDays.getDate()).padStart(2, '0')}`
+
+    switch (key) {
+      case 'overdue':
+        setFilter({
+          ...DEFAULT_FILTER_STATE,
+          dueTo: todayIso,
+          hideArchived: true,
+        })
+        setSort('dueDateAsc')
+        break
+      case 'dueThisWeek':
+        setFilter({
+          ...DEFAULT_FILTER_STATE,
+          dueFrom: todayIso,
+          dueTo: inSevenIso,
+          hideArchived: true,
+        })
+        setSort('dueDateAsc')
+        break
+      case 'awaitingApproval':
+        // No first-class approval filter on JobFilterState yet — the user
+        // will see ALL non-archived jobs and we rely on them eyeballing
+        // the approval column. This is honest about the current limit.
+        // A future round can add `approvalStatus` to JobFilterState.
+        setFilter({ ...DEFAULT_FILTER_STATE, hideArchived: true })
+        setSort('newest')
+        break
+      case 'recentlyPosted':
+        setFilter({
+          ...DEFAULT_FILTER_STATE,
+          stage: 'posted',
+          hideArchived: false,
+        })
+        setSort('recentlyUpdated')
+        break
+      case 'inFlight':
+        setFilter({ ...DEFAULT_FILTER_STATE, hideArchived: true })
+        setSort('newest')
+        break
+    }
+  }
+
+  /** When the user changes filters via the filter bar, the widget-driven
+   * "active" indicator is no longer accurate — clear it. */
+  function setFilterFromBar(next: JobFilterState) {
+    setFilter(next)
+    setActiveWidget(null)
+  }
+
+  function setSortFromBar(next: SortKey) {
+    setSort(next)
+    setActiveWidget(null)
+  }
+
   // ---------- derived data ----------
   // Apply workspace filter first (the filter state doesn't include
   // workspace — it's an outer constraint), then run filters/sort.
@@ -217,6 +303,16 @@ export function AppShell() {
       : jobs
     return applyJobView(inWorkspace, filter, sort)
   }, [jobs, selectedWorkspaceId, filter, sort])
+
+  /** Workspace-scoped jobs list, NOT filtered. The widgets compute counts
+   * from this — we don't want the widgets to react to the filters they
+   * themselves apply, otherwise applying "overdue" zeros out every other
+   * widget. */
+  const workspaceJobs = useMemo(() => {
+    return selectedWorkspaceId
+      ? jobs.filter((j) => j.workspaceId === selectedWorkspaceId)
+      : jobs
+  }, [jobs, selectedWorkspaceId])
 
   const activeWorkspace = workspaces.find((w) => w.id === selectedWorkspaceId)
 
@@ -275,13 +371,17 @@ export function AppShell() {
           </div>
         )}
 
-        <DashboardStats jobs={visibleJobs} />
+        <DashboardWidgets
+          jobs={workspaceJobs}
+          activeWidget={activeWidget}
+          onSelectWidget={applyWidgetFilter}
+        />
 
         <DashboardFilters
           filter={filter}
-          setFilter={setFilter}
+          setFilter={setFilterFromBar}
           sort={sort}
-          setSort={setSort}
+          setSort={setSortFromBar}
         />
 
 
