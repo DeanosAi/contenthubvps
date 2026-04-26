@@ -21,12 +21,24 @@ import type { LiveMetrics } from './types'
 // ---------------------------------------------------------------------
 
 const FACEBOOK_POST_ACTOR = 'apify~facebook-posts-scraper'
-const INSTAGRAM_POST_ACTOR = 'apify~instagram-post-scraper'
 
-// Default timeout for a single actor run. Apify's actors usually finish
-// in 10-20s for a single URL but we allow 60s headroom because some
-// posts trigger slow scraping paths.
-const ACTOR_RUN_TIMEOUT_MS = 60_000
+// Round 6.3 fix: was 'apify~instagram-post-scraper', which is a PROFILE
+// scraper requiring `username` as input. We need a SINGLE-POST-URL
+// scraper, which is `apify~instagram-scraper` (no "-post-" in the name).
+// That actor accepts `directUrls` containing a post or reel URL and
+// returns one item per URL when `resultsType: 'posts'`.
+const INSTAGRAM_POST_ACTOR = 'apify~instagram-scraper'
+
+// Default timeout for a single actor run.
+//
+// Round 5 set this to 60s based on optimistic estimates. Round 6.3
+// bumps it to 120s after seeing real-world Facebook runs routinely
+// take 60-100s on the official actor (which scrapes the parent page
+// even when given a single post URL — wasted work, but the only path
+// that works at all without a community actor swap). Instagram runs
+// usually finish in 15-30s so the higher cap doesn't slow them down,
+// it just means Facebook actually completes instead of timing out.
+const ACTOR_RUN_TIMEOUT_MS = 120_000
 
 // How long to poll the run status before declaring it stuck. Apify
 // recommends polling every 2-5s; we go with 3s.
@@ -141,18 +153,35 @@ function detectPlatform(url: string): 'facebook' | 'instagram' | null {
 // ---------------------------------------------------------------------
 
 /**
- * Facebook scraping has a known quirk: the actor sometimes returns a
- * thin result on the first run (post id + no metrics). The desktop app
- * worked around this with a 25→50 retry pattern: ask for 25 items
- * first, retry with 50 if metrics are missing. We preserve that
- * behaviour here.
+ * Facebook scraping has two known quirks worth documenting:
+ *
+ *   1. `apify~facebook-posts-scraper` is officially a PAGE scraper. When
+ *      we hand it a single post URL via startUrls, the actor's actual
+ *      behaviour is to scrape the parent page (slow — 60-100s on
+ *      busy pages) and look for the matching post in the result set.
+ *      That's why we set a low resultsLimit and use the page-wide
+ *      ACTOR_RUN_TIMEOUT_MS of 120s. There isn't a cleaner Apify-official
+ *      "single Facebook post by URL" actor as of this writing.
+ *
+ *   2. The actor sometimes returns a thin result on the first run (post
+ *      id but no engagement counts). We work around this with a 25→50
+ *      retry: ask for 25 items first, retry with 50 if metrics are
+ *      missing. Inherited from the desktop app's pattern.
+ *
+ * If Facebook fetches feel too slow or unreliable in production, a
+ * Round 6.4 follow-up could:
+ *   - Switch to a community actor that explicitly accepts post URLs
+ *     (riskier — they get unmaintained)
+ *   - Use the workspace-level facebook_page_url + a page scraper, then
+ *     match the requested post by id within recent posts
  */
 async function fetchFacebookPost(
   url: string,
   apifyToken: string,
   options: { facebookRetryItems?: boolean } = {},
 ): Promise<FetchOutcome> {
-  // First attempt: 25 items.
+  // First attempt: 25 items. The actor will scrape recent posts of the
+  // parent page; resultsLimit caps how far back we look.
   const first = await runActorAndPoll(FACEBOOK_POST_ACTOR, apifyToken, {
     startUrls: [{ url }],
     resultsLimit: 25,
@@ -165,7 +194,11 @@ async function fetchFacebookPost(
       ok: false,
       error: {
         kind: 'no-data',
-        message: 'Facebook actor returned no items for that URL.',
+        message:
+          'Facebook actor returned no items matching this post. The post ' +
+          'may be too old to appear in the page\'s recent posts, the page ' +
+          'may not be public, or Facebook may have rate-limited the scraper. ' +
+          'Try again in a minute, or fetch a more recent post first.',
       },
     }
   }
@@ -277,24 +310,42 @@ function extractFacebookPostId(item: Record<string, unknown>): string | null {
 // ---------------------------------------------------------------------
 
 async function fetchInstagramPost(url: string, apifyToken: string): Promise<FetchOutcome> {
+  // Input shape for `apify~instagram-scraper`. The key fields:
+  //   - directUrls: an array containing the post or reel URL
+  //   - resultsType: 'posts' so the actor returns one post item rather
+  //     than a profile feed
+  //   - resultsLimit: 1 — we only want the post we asked for
+  //   - addParentData: false — saves time + dataset items by NOT also
+  //     scraping the post's owner profile
+  //   - searchType / searchLimit: required by the input schema even for
+  //     URL-driven runs; defaults are accepted but explicit is safer
   const result = await runActorAndPoll(INSTAGRAM_POST_ACTOR, apifyToken, {
     directUrls: [url],
+    resultsType: 'posts',
     resultsLimit: 1,
     addParentData: false,
+    searchType: 'hashtag',
+    searchLimit: 1,
+    enhanceUserSearchWithFacebookPage: false,
+    isUserReelFeedURL: false,
+    isUserTaggedFeedURL: false,
   })
   if (!result.ok) return { ok: false, error: result.error }
 
-  const first = result.items[0]
-  if (typeof first !== 'object' || first === null) {
+  // Match the requested URL to the right item, in case the actor
+  // returned more than one (e.g. for reels with related items).
+  const item = pickBestInstagramItem(result.items, url)
+  if (!item) {
     return {
       ok: false,
       error: {
         kind: 'no-data',
-        message: 'Instagram actor returned no items for that URL.',
+        message:
+          'Instagram actor returned no items for that URL. The post may be ' +
+          'from a private account, or the URL may not be a public post/reel.',
       },
     }
   }
-  const item = first as Record<string, unknown>
   const metrics = parseInstagramMetrics(item)
   return {
     ok: true,
@@ -302,9 +353,56 @@ async function fetchInstagramPost(url: string, apifyToken: string): Promise<Fetc
   }
 }
 
+/** Pick the item from an Instagram run's results that best matches the
+ * requested URL. The actor can return multiple items for some inputs
+ * (carousel posts, reels with related content); the requested post is
+ * usually the first one but we match by URL/shortcode to be safe. */
+function pickBestInstagramItem(
+  items: unknown[],
+  targetUrl: string,
+): Record<string, unknown> | null {
+  if (items.length === 0) return null
+  const target = targetUrl.toLowerCase()
+
+  // Pull the shortcode from the URL (instagram.com/p/{shortcode}/ or
+  // /reel/{shortcode}/) for matching against the item's shortCode field.
+  const shortcodeMatch = target.match(/\/(?:p|reel|tv)\/([a-zA-Z0-9_-]+)/i)
+  const targetShortcode = shortcodeMatch ? shortcodeMatch[1].toLowerCase() : null
+
+  // Best match: exact URL or shortcode.
+  for (const raw of items) {
+    if (typeof raw !== 'object' || raw === null) continue
+    const item = raw as Record<string, unknown>
+    const itemUrl = String(item.url ?? item.postUrl ?? '').toLowerCase()
+    if (itemUrl && itemUrl === target) return item
+    if (targetShortcode) {
+      const itemShortcode = String(item.shortCode ?? item.shortcode ?? '').toLowerCase()
+      if (itemShortcode === targetShortcode) return item
+    }
+  }
+  // Otherwise, the first item.
+  const first = items[0]
+  return typeof first === 'object' && first !== null
+    ? (first as Record<string, unknown>)
+    : null
+}
+
 function parseInstagramMetrics(item: Record<string, unknown>): LiveMetrics {
-  const views = pickNumber(item, ['videoViewCount', 'videoPlayCount', 'viewsCount'])
-  const likes = pickNumber(item, ['likesCount', 'likes'])
+  // apify~instagram-scraper returns slightly different field names
+  // depending on the post type (regular post, reel, video, carousel).
+  // We try several candidates and take the first present.
+  //
+  // Notable: the scraper sometimes returns -1 for likesCount when the
+  // post owner has hidden the like count. Treat -1 as "not available"
+  // rather than 0.
+  const views = pickNumber(item, [
+    'videoViewCount',
+    'videoPlayCount',
+    'viewsCount',
+    'videoViews',
+    'playCount',
+  ])
+  const likes = pickPositiveNumber(item, ['likesCount', 'likes'])
   const comments = pickNumber(item, ['commentsCount', 'comments'])
   // IG doesn't expose shares via scraping; nor public saves.
   const engagement = (likes ?? 0) + (comments ?? 0)
@@ -320,6 +418,17 @@ function parseInstagramMetrics(item: Record<string, unknown>): LiveMetrics {
     impressions: null,
     engagementRate,
   }
+}
+
+/** Like pickNumber but treats negative values (e.g. Instagram's -1 for
+ * "likes hidden by owner") as "not available" rather than a real number. */
+function pickPositiveNumber(
+  obj: Record<string, unknown>,
+  keys: string[],
+): number | null {
+  const v = pickNumber(obj, keys)
+  if (v == null) return null
+  return v < 0 ? null : v
 }
 
 // ---------------------------------------------------------------------
@@ -395,17 +504,56 @@ async function runActorAndPoll(
   }
 
   // 2. Poll until SUCCEEDED, FAILED, or timeout.
+  //
+  // Round 6.3 hardening:
+  //   - Track consecutive status-fetch failures. Previous code silently
+  //     `continue`d on every failure, meaning persistent network issues
+  //     just looked like an indistinguishable timeout.
+  //   - Capture the last-seen status. When we time out, the message
+  //     now says "still RUNNING after 120s" instead of just "timeout",
+  //     which tells the user whether the actor was actually working
+  //     vs stuck in a queue.
+  //   - Bug fix: previously a `break` out of the while loop would still
+  //     fall through to `if (Date.now() >= deadline)` which was a no-op
+  //     in the success case but the structure was confusing. Now we
+  //     explicitly exit on success and the timeout check is unambiguous.
   const deadline = Date.now() + ACTOR_RUN_TIMEOUT_MS
+  let lastSeenStatus: string | null = null
+  let consecutiveStatusFailures = 0
+  let succeeded = false
   while (Date.now() < deadline) {
     await sleep(POLL_INTERVAL_MS)
     const statusUrl = `https://api.apify.com/v2/actor-runs/${encodeURIComponent(runId)}?token=${encodeURIComponent(token)}`
     const statusRes = await fetch(statusUrl).catch(() => null)
-    if (!statusRes || !statusRes.ok) continue
+    if (!statusRes || !statusRes.ok) {
+      consecutiveStatusFailures++
+      // After ~30s of failed status checks (10 retries at 3s each),
+      // give up rather than wait out the full timeout — the user will
+      // get a faster, more accurate error.
+      if (consecutiveStatusFailures >= 10) {
+        return {
+          ok: false,
+          error: {
+            kind: 'apify-error',
+            status: statusRes?.status ?? 0,
+            message:
+              `Could not check Apify run status — ${consecutiveStatusFailures} ` +
+              `consecutive failures. Last HTTP status: ${statusRes?.status ?? 'no response'}.`,
+          },
+        }
+      }
+      continue
+    }
+    consecutiveStatusFailures = 0
     const body = (await statusRes.json().catch(() => null)) as
       | { data?: { status?: string } }
       | null
     const status = body?.data?.status
-    if (status === 'SUCCEEDED') break
+    if (status) lastSeenStatus = status
+    if (status === 'SUCCEEDED') {
+      succeeded = true
+      break
+    }
     if (status === 'FAILED' || status === 'ABORTED' || status === 'TIMED-OUT') {
       return {
         ok: false,
@@ -418,12 +566,18 @@ async function runActorAndPoll(
     }
     // Otherwise keep polling (READY, RUNNING, etc).
   }
-  if (Date.now() >= deadline) {
+  if (!succeeded) {
     return {
       ok: false,
       error: {
         kind: 'timeout',
-        message: `Apify actor exceeded ${ACTOR_RUN_TIMEOUT_MS / 1000}s timeout.`,
+        message:
+          lastSeenStatus
+            ? `Apify actor still ${lastSeenStatus} after ${ACTOR_RUN_TIMEOUT_MS / 1000}s. ` +
+              `Run is still going on Apify's side; metrics may complete shortly. ` +
+              `Try fetching this post again in a minute.`
+            : `Apify actor did not start within ${ACTOR_RUN_TIMEOUT_MS / 1000}s. ` +
+              `Could be a queue backlog on Apify's side.`,
       },
     }
   }
