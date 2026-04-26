@@ -1,15 +1,18 @@
 "use client"
 
 import { useState } from 'react'
-import Link from 'next/link'
-import { usePathname } from 'next/navigation'
 import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd'
 import type { Workspace } from '@/lib/types'
+import { WorkspaceEditDialog } from '@/components/workspace-edit-dialog'
 
 /** Sidebar listing all workspaces with drag-to-reorder, hover-revealed
  * Edit and Delete buttons, and a footer input to add new ones. This is
  * the only place workspaces appear in the chrome — the duplicate
  * grid that lived in the main panel of Round 2 has been removed.
+ *
+ * Round 6.4 adds a ⚙ button per row that opens a settings dialog for
+ * the deeper fields (color, Facebook page URL, Instagram page URL).
+ * The inline ✎ rename stays for quick name-only edits.
  *
  * Data flow: this component is presentational + emits intents via the
  * callbacks below. AppShell still owns the canonical workspace state
@@ -22,6 +25,7 @@ export function HostedSidebar({
   onRenameWorkspace,
   onDeleteWorkspace,
   onReorderWorkspaces,
+  onWorkspaceUpdated,
 }: {
   workspaces: Workspace[]
   selectedWorkspaceId: string
@@ -32,11 +36,14 @@ export function HostedSidebar({
   /** Bulk reorder. Receives the ids in their new order. AppShell calls
    * /api/workspaces/reorder with this list. */
   onReorderWorkspaces: (orderedIds: string[]) => Promise<void>
+  /** Round 6.4: called by the settings dialog with the freshly-saved
+   * workspace, so AppShell can update its state without a full refetch. */
+  onWorkspaceUpdated: (updated: Workspace) => void
 }) {
-  const pathname = usePathname()
   const [editingId, setEditingId] = useState<string>('')
   const [editingName, setEditingName] = useState('')
   const [newName, setNewName] = useState('')
+  const [settingsForId, setSettingsForId] = useState<string>('')
 
   function startEdit(workspace: Workspace) {
     setEditingId(workspace.id)
@@ -91,11 +98,11 @@ export function HostedSidebar({
       </div>
 
       <div className="p-4 border-b">
-        <nav className="space-y-1 text-sm">
-          <SidebarLink href="/app" label="Dashboard" pathname={pathname} matchPrefix="/app" />
-          <SidebarLink href="/calendar" label="Calendar" pathname={pathname} matchPrefix="/calendar" />
-          <SidebarLink href="/reports" label="Reports" pathname={pathname} matchPrefix="/reports" />
-          <SidebarLink href="/settings" label="Settings" pathname={pathname} matchPrefix="/settings" />
+        <nav className="space-y-2 text-sm">
+          <div className="rounded-md bg-[hsl(var(--accent))] px-3 py-2">Dashboard</div>
+          <div className="rounded-md px-3 py-2 text-[hsl(var(--muted-foreground))]">Calendar</div>
+          <div className="rounded-md px-3 py-2 text-[hsl(var(--muted-foreground))]">Reports</div>
+          <div className="rounded-md px-3 py-2 text-[hsl(var(--muted-foreground))]">Settings</div>
         </nav>
       </div>
 
@@ -176,6 +183,17 @@ export function HostedSidebar({
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation()
+                                  setSettingsForId(workspace.id)
+                                }}
+                                className="text-xs px-1.5 py-1 rounded hover:bg-[hsl(var(--background))]/50"
+                                title="Workspace settings (color, page URLs)"
+                                aria-label="Settings"
+                              >
+                                ⚙
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation()
                                   void handleDelete(workspace)
                                 }}
                                 className="text-xs px-1.5 py-1 rounded hover:bg-red-500/20 text-red-400"
@@ -225,36 +243,24 @@ export function HostedSidebar({
           </button>
         </div>
       </div>
-    </aside>
-  )
-}
 
-/** Navigation link that renders active styling when the current pathname
- * matches `matchPrefix`. Pulled out of the JSX so the nav stays scannable. */
-function SidebarLink({
-  href,
-  label,
-  pathname,
-  matchPrefix,
-}: {
-  href: string
-  label: string
-  pathname: string | null
-  matchPrefix: string
-}) {
-  const isActive =
-    pathname === matchPrefix ||
-    (pathname?.startsWith(matchPrefix + '/') ?? false)
-  return (
-    <Link
-      href={href}
-      className={`block rounded-md px-3 py-2 transition-colors ${
-        isActive
-          ? 'bg-[hsl(var(--accent))] text-[hsl(var(--accent-foreground))]'
-          : 'text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--accent))]/40 hover:text-[hsl(var(--foreground))]'
-      }`}
-    >
-      {label}
-    </Link>
+      {/* Round 6.4: settings dialog. Rendered inside the sidebar so it
+          lives in the same tree as the trigger button — keeps the
+          state local to where it's relevant. */}
+      {settingsForId && (() => {
+        const ws = workspaces.find((w) => w.id === settingsForId)
+        if (!ws) return null
+        return (
+          <WorkspaceEditDialog
+            workspace={ws}
+            onClose={() => setSettingsForId('')}
+            onSaved={(updated) => {
+              onWorkspaceUpdated(updated)
+              setSettingsForId('')
+            }}
+          />
+        )
+      })()}
+    </aside>
   )
 }

@@ -335,6 +335,11 @@ export function ReportsShell() {
         onRenameWorkspace={renameWorkspace}
         onDeleteWorkspace={deleteWorkspace}
         onReorderWorkspaces={reorderWorkspaces}
+        onWorkspaceUpdated={(updated) => {
+          setWorkspaces((prev) =>
+            prev.map((w) => (w.id === updated.id ? updated : w)),
+          )
+        }}
       />
 
       <main className="flex-1 p-8 space-y-6">
