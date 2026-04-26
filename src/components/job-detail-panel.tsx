@@ -467,15 +467,13 @@ export function JobDetailPanel({
                 <MetricTile label="Comments" value={form.liveMetrics.comments} />
                 <MetricTile label="Shares" value={form.liveMetrics.shares} />
               </div>
-              {form.liveMetrics.engagementRate != null && (
-                <p className="text-[11px] text-[hsl(var(--muted-foreground))] mt-2">
-                  Engagement rate:{' '}
-                  <span className="text-[hsl(var(--foreground))] font-medium">
-                    {(form.liveMetrics.engagementRate * 100).toFixed(2)}%
-                  </span>
-                </p>
-              )}
-              <p className="text-[11px] text-[hsl(var(--muted-foreground))] mt-1">
+              {/* Engagement rate gets its own tile so it stays visible
+                  and harder to drop in future edits. Renders even when
+                  null (shows "—") so the slot is always there. */}
+              <div className="mt-2">
+                <EngagementRateTile rate={form.liveMetrics.engagementRate} />
+              </div>
+              <p className="text-[11px] text-[hsl(var(--muted-foreground))] mt-2">
                 Last fetched: {formatStamp(form.lastMetricsFetchAt)}
               </p>
             </div>
@@ -550,6 +548,22 @@ function MetricTile({ label, value }: { label: string; value: number | null }) {
       </p>
       <p className="text-base font-semibold mt-0.5">
         {value == null ? '—' : value.toLocaleString()}
+      </p>
+    </div>
+  )
+}
+
+/** Engagement rate tile — full-width row beneath the four metric tiles.
+ * Stored on disk as a fraction (0.0234 = 2.34%); rendered as a percentage
+ * to two decimals. Null renders "—" so the slot is always present. */
+function EngagementRateTile({ rate }: { rate: number | null }) {
+  return (
+    <div className="rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--primary))]/5 p-2.5 flex items-center justify-between">
+      <p className="text-[11px] uppercase tracking-wider text-[hsl(var(--muted-foreground))]">
+        Engagement rate
+      </p>
+      <p className="text-base font-semibold text-[hsl(var(--foreground))]">
+        {rate == null ? '—' : (rate * 100).toFixed(2) + '%'}
       </p>
     </div>
   )

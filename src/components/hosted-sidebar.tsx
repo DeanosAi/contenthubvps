@@ -1,6 +1,8 @@
 "use client"
 
 import { useState } from 'react'
+import Link from 'next/link'
+import { usePathname } from 'next/navigation'
 import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd'
 import type { Workspace } from '@/lib/types'
 import { WorkspaceEditDialog } from '@/components/workspace-edit-dialog'
@@ -10,13 +12,17 @@ import { WorkspaceEditDialog } from '@/components/workspace-edit-dialog'
  * the only place workspaces appear in the chrome — the duplicate
  * grid that lived in the main panel of Round 2 has been removed.
  *
- * Round 6.4 adds a ⚙ button per row that opens a settings dialog for
- * the deeper fields (color, Facebook page URL, Instagram page URL).
- * The inline ✎ rename stays for quick name-only edits.
+ * Round 6.5 fixes a Round 6.4 regression: the previous version was
+ * rebased off the Round 2.1 sidebar (which predated nav links) and so
+ * accidentally removed the Dashboard / Calendar / Reports / Settings
+ * navigation. Round 6.5 restores the Round 4.2 nav and layers the
+ * workspace settings dialog (the Round 6.4 contribution) on top.
  *
  * Data flow: this component is presentational + emits intents via the
- * callbacks below. AppShell still owns the canonical workspace state
- * and is responsible for refetching after each mutation succeeds. */
+ * callbacks below. Each page-level shell (AppShell, CalendarShell,
+ * ReportsShell, SettingsShell) owns its own canonical workspace state
+ * and passes onWorkspaceUpdated to refresh after the settings dialog
+ * saves. */
 export function HostedSidebar({
   workspaces,
   selectedWorkspaceId,
@@ -36,10 +42,12 @@ export function HostedSidebar({
   /** Bulk reorder. Receives the ids in their new order. AppShell calls
    * /api/workspaces/reorder with this list. */
   onReorderWorkspaces: (orderedIds: string[]) => Promise<void>
-  /** Round 6.4: called by the settings dialog with the freshly-saved
-   * workspace, so AppShell can update its state without a full refetch. */
+  /** Round 6.4 addition (re-delivered in 6.5): called by the settings
+   * dialog with the freshly-saved workspace, so each shell can update
+   * its state without a full refetch. */
   onWorkspaceUpdated: (updated: Workspace) => void
 }) {
+  const pathname = usePathname()
   const [editingId, setEditingId] = useState<string>('')
   const [editingName, setEditingName] = useState('')
   const [newName, setNewName] = useState('')
@@ -98,11 +106,11 @@ export function HostedSidebar({
       </div>
 
       <div className="p-4 border-b">
-        <nav className="space-y-2 text-sm">
-          <div className="rounded-md bg-[hsl(var(--accent))] px-3 py-2">Dashboard</div>
-          <div className="rounded-md px-3 py-2 text-[hsl(var(--muted-foreground))]">Calendar</div>
-          <div className="rounded-md px-3 py-2 text-[hsl(var(--muted-foreground))]">Reports</div>
-          <div className="rounded-md px-3 py-2 text-[hsl(var(--muted-foreground))]">Settings</div>
+        <nav className="space-y-1 text-sm">
+          <SidebarLink href="/app" label="Dashboard" pathname={pathname} matchPrefix="/app" />
+          <SidebarLink href="/calendar" label="Calendar" pathname={pathname} matchPrefix="/calendar" />
+          <SidebarLink href="/reports" label="Reports" pathname={pathname} matchPrefix="/reports" />
+          <SidebarLink href="/settings" label="Settings" pathname={pathname} matchPrefix="/settings" />
         </nav>
       </div>
 
@@ -244,9 +252,8 @@ export function HostedSidebar({
         </div>
       </div>
 
-      {/* Round 6.4: settings dialog. Rendered inside the sidebar so it
-          lives in the same tree as the trigger button — keeps the
-          state local to where it's relevant. */}
+      {/* Round 6.4 settings dialog (re-delivered in 6.5). Rendered inside
+          the sidebar so it lives in the same tree as its trigger button. */}
       {settingsForId && (() => {
         const ws = workspaces.find((w) => w.id === settingsForId)
         if (!ws) return null
@@ -262,5 +269,35 @@ export function HostedSidebar({
         )
       })()}
     </aside>
+  )
+}
+
+/** Navigation link that renders active styling when the current pathname
+ * matches `matchPrefix`. Pulled out of the JSX so the nav stays scannable. */
+function SidebarLink({
+  href,
+  label,
+  pathname,
+  matchPrefix,
+}: {
+  href: string
+  label: string
+  pathname: string | null
+  matchPrefix: string
+}) {
+  const isActive =
+    pathname === matchPrefix ||
+    (pathname?.startsWith(matchPrefix + '/') ?? false)
+  return (
+    <Link
+      href={href}
+      className={`block rounded-md px-3 py-2 transition-colors ${
+        isActive
+          ? 'bg-[hsl(var(--accent))] text-[hsl(var(--accent-foreground))]'
+          : 'text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--accent))]/40 hover:text-[hsl(var(--foreground))]'
+      }`}
+    >
+      {label}
+    </Link>
   )
 }
