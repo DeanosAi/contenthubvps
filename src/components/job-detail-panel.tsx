@@ -5,6 +5,7 @@ import type { Job, JobStage, ApprovalStatus, AssetLink, CustomField } from '@/li
 import { useUsers } from '@/lib/use-users'
 import { AssetLinksEditor } from './asset-links-editor'
 import { CustomFieldsEditor } from './custom-fields-editor'
+import { CampaignField } from './campaign-field'
 
 const STAGES: JobStage[] = ['brief', 'production', 'ready', 'posted', 'archive']
 const APPROVALS: { value: ApprovalStatus; label: string; tone: string }[] = [
@@ -32,6 +33,7 @@ type Editable = Pick<
   | 'briefUrl'
   | 'assetLinks'
   | 'customFields'
+  | 'campaign'
   | 'approvalStatus'
   | 'assignedTo'
   | 'facebookLiveUrl'
@@ -107,6 +109,7 @@ export function JobDetailPanel({
       briefUrl: form.briefUrl,
       assetLinks: form.assetLinks,
       customFields: form.customFields,
+      campaign: form.campaign,
       approvalStatus: form.approvalStatus,
       assignedTo: form.assignedTo,
       facebookLiveUrl: form.facebookLiveUrl,
@@ -362,6 +365,19 @@ export function JobDetailPanel({
                 Open brief ↗
               </a>
             )}
+          </div>
+
+          <div>
+            <label className="text-xs text-[hsl(var(--muted-foreground))]">Campaign</label>
+            <CampaignField
+              value={form.campaign}
+              workspaceId={form.workspaceId}
+              onChange={(next) => patch('campaign', next)}
+            />
+            <p className="text-[11px] text-[hsl(var(--muted-foreground))] mt-1">
+              Group related posts under a shared campaign name. Used by the
+              Campaign report (coming in Round 6.2) to compare performance.
+            </p>
           </div>
 
           <div>

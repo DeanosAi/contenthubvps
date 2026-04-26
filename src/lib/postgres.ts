@@ -101,6 +101,29 @@ export async function ensureSchema(): Promise<void> {
   // jobs to decide when to re-fetch.
   await pool.query(`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS last_metrics_fetch_at TIMESTAMPTZ;`)
 
+  // ---------- Round 6.1 additions ----------
+  // campaign: free-text campaign name. Lets users group posts under a
+  // shared label (e.g. "Spring Launch 2026") and later filter the
+  // campaign-comparison report to that group. Per-workspace conceptually
+  // — the autocomplete endpoint only returns distinct values within
+  // the calling workspace, so the same string under two workspaces is
+  // treated as two unrelated campaigns.
+  //
+  // No separate `campaigns` table: campaigns are essentially tags for a
+  // small team. If management features become important later (rename
+  // a campaign across many posts at once, share a campaign across
+  // workspaces, etc.) we can normalise then.
+  await pool.query(`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS campaign TEXT;`)
+  // Partial index — only rows that actually have a campaign value are
+  // indexed. Most jobs probably won't, so this stays small. Speeds up
+  // both the autocomplete query (DISTINCT campaign WHERE workspace_id=X)
+  // and the campaign-filtered reports.
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS jobs_workspace_campaign_idx
+    ON jobs (workspace_id, campaign)
+    WHERE campaign IS NOT NULL;
+  `)
+
   // ---------- metric_snapshots ----------
   // Append-only history of every metric fetch we record. One row per
   // fetch per platform. Reports query this for trend analysis (month-

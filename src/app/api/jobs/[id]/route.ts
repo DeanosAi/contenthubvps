@@ -28,8 +28,12 @@ const UpdateJobInput = z
     notes: z.string().nullable().optional(),
     contentType: z.string().nullable().optional(),
     briefUrl: z.string().nullable().optional(),
-    assetLinks: z.array(z.object({ id: z.string(), label: z.string(), url: z.string() })).nullable().optional(),
+    assetLinks: z
+      .array(z.object({ id: z.string(), label: z.string(), url: z.string() }))
+      .nullable()
+      .optional(),
     customFields: z.array(CustomFieldSchema).nullable().optional(),
+    campaign: z.string().nullable().optional(),
     approvalStatus: z.enum(APPROVAL).optional(),
     assignedTo: z.string().nullable().optional(),
     facebookLiveUrl: z.string().nullable().optional(),
@@ -43,7 +47,7 @@ const COLUMN_LIST = `
   id, workspace_id, title, description, stage, priority, due_date,
   hashtags, platform, live_url, notes,
   content_type, brief_url, asset_links_json, approval_status, assigned_to,
-  custom_fields_json,
+  custom_fields_json, campaign,
   facebook_live_url, facebook_post_id, instagram_live_url,
   posted_at, live_metrics_json, last_metrics_fetch_at,
   created_at, updated_at
@@ -63,6 +67,7 @@ const COLUMN_MAP: Record<string, string> = {
   briefUrl: 'brief_url',
   assetLinks: 'asset_links_json',
   customFields: 'custom_fields_json',
+  campaign: 'campaign',
   approvalStatus: 'approval_status',
   assignedTo: 'assigned_to',
   facebookLiveUrl: 'facebook_live_url',
@@ -72,6 +77,12 @@ const COLUMN_MAP: Record<string, string> = {
 }
 
 const JSONB_KEYS = new Set(['assetLinks', 'customFields'])
+
+function normaliseCampaign(v: string | null | undefined): string | null {
+  if (v == null) return null
+  const trimmed = v.trim()
+  return trimmed.length > 0 ? trimmed : null
+}
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getSession()
@@ -122,6 +133,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         values.push(v ? new Date(v as string) : null)
       } else if (JSONB_KEYS.has(k)) {
         values.push(v == null ? null : JSON.stringify(v))
+      } else if (k === 'campaign') {
+        values.push(normaliseCampaign(v as string | null | undefined))
       } else {
         values.push(v)
       }

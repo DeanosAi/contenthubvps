@@ -9,6 +9,16 @@ const STAGES = ['brief', 'production', 'ready', 'posted', 'archive'] as const
 const APPROVAL = ['none', 'awaiting', 'approved', 'changes_requested'] as const
 const FIELD_TYPES = ['text', 'textarea', 'number', 'date', 'url'] as const
 
+/** Normalise a free-text campaign value: trim whitespace, treat empty
+ * string as null. Prevents "Spring Launch" and "Spring Launch " from
+ * being treated as two distinct campaigns because of trailing whitespace
+ * from a copy/paste. Used by both POST (create) and PATCH (update). */
+function normaliseCampaign(v: string | null | undefined): string | null {
+  if (v == null) return null
+  const trimmed = v.trim()
+  return trimmed.length > 0 ? trimmed : null
+}
+
 const CustomFieldSchema = z.object({
   id: z.string(),
   label: z.string(),
@@ -33,6 +43,7 @@ const CreateJobInput = z.object({
     .array(z.object({ id: z.string(), label: z.string(), url: z.string() }))
     .optional(),
   customFields: z.array(CustomFieldSchema).optional(),
+  campaign: z.string().nullable().optional(),
   approvalStatus: z.enum(APPROVAL).optional(),
   assignedTo: z.string().nullable().optional(),
   facebookLiveUrl: z.string().nullable().optional(),
@@ -40,11 +51,12 @@ const CreateJobInput = z.object({
 })
 
 // Includes Round 4.1 additions: posted_at, live_metrics_json, last_metrics_fetch_at.
+// Round 6.1: campaign.
 const COLUMN_LIST = `
   id, workspace_id, title, description, stage, priority, due_date,
   hashtags, platform, live_url, notes,
   content_type, brief_url, asset_links_json, approval_status, assigned_to,
-  custom_fields_json,
+  custom_fields_json, campaign,
   facebook_live_url, facebook_post_id, instagram_live_url,
   posted_at, live_metrics_json, last_metrics_fetch_at,
   created_at, updated_at
@@ -108,16 +120,16 @@ export async function POST(req: NextRequest) {
       id, workspace_id, title, description, stage, priority, due_date,
       hashtags, platform, live_url, notes,
       content_type, brief_url, asset_links_json, approval_status, assigned_to,
-      custom_fields_json,
+      custom_fields_json, campaign,
       facebook_live_url, instagram_live_url,
       posted_at
     ) VALUES (
       $1, $2, $3, $4, $5, $6, $7,
       $8, $9, $10, $11,
       $12, $13, $14, $15, $16,
-      $17,
-      $18, $19,
-      $20
+      $17, $18,
+      $19, $20,
+      $21
     )`,
     [
       id,
@@ -137,6 +149,10 @@ export async function POST(req: NextRequest) {
       parsed.data.approvalStatus ?? 'none',
       parsed.data.assignedTo ?? null,
       parsed.data.customFields ? JSON.stringify(parsed.data.customFields) : null,
+      // Trim whitespace + treat empty string as null. We don't want
+      // "Spring Launch" and "Spring Launch " counted as different campaigns
+      // because of trailing whitespace from a copy/paste.
+      normaliseCampaign(parsed.data.campaign),
       parsed.data.facebookLiveUrl ?? null,
       parsed.data.instagramLiveUrl ?? null,
       postedAt,

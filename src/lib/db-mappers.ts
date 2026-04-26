@@ -188,6 +188,7 @@ export function rowToJob(row: Row): Job {
     approvalStatus: mapApprovalStatus(row.approval_status),
     assignedTo: asNullableString(row.assigned_to),
     customFields: mapCustomFields(row.custom_fields_json),
+    campaign: asNullableString(row.campaign),
     facebookLiveUrl: asNullableString(row.facebook_live_url),
     facebookPostId: asNullableString(row.facebook_post_id),
     instagramLiveUrl: asNullableString(row.instagram_live_url),

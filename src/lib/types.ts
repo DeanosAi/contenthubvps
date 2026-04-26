@@ -104,6 +104,12 @@ export interface Job {
   approvalStatus: ApprovalStatus
   assignedTo: string | null
   customFields: CustomField[]
+  /** Free-text campaign tag. Multiple jobs sharing the same string are
+   * considered part of the same campaign. Per-workspace — the autocomplete
+   * endpoint only returns values within the calling workspace, so the
+   * same string under two workspaces is treated as two unrelated campaigns.
+   * Used by the campaign-comparison report in Round 6.2. */
+  campaign: string | null
   facebookLiveUrl: string | null
   facebookPostId: string | null
   instagramLiveUrl: string | null

@@ -5,6 +5,7 @@ import type { Job, JobStage, Workspace, AssetLink, ApprovalStatus, CustomField }
 import { useUsers } from '@/lib/use-users'
 import { AssetLinksEditor } from './asset-links-editor'
 import { CustomFieldsEditor } from './custom-fields-editor'
+import { CampaignField } from './campaign-field'
 
 const STAGES: JobStage[] = ['brief', 'production', 'ready', 'posted', 'archive']
 const PLATFORMS = ['', 'instagram', 'facebook', 'tiktok', 'youtube']
@@ -30,6 +31,7 @@ interface CreatePayload {
   briefUrl: string | null
   assetLinks: AssetLink[]
   customFields: CustomField[]
+  campaign: string | null
   approvalStatus: ApprovalStatus
   assignedTo: string | null
 }
@@ -48,6 +50,7 @@ const EMPTY_DRAFT: Omit<CreatePayload, 'workspaceId'> = {
   briefUrl: null,
   assetLinks: [],
   customFields: [],
+  campaign: null,
   approvalStatus: 'none',
   assignedTo: null,
 }
@@ -130,6 +133,7 @@ export function JobCreateDialog({
       notes: draft.notes?.trim() || null,
       contentType: draft.contentType?.trim() || null,
       briefUrl: draft.briefUrl?.trim() || null,
+      campaign: draft.campaign?.trim() || null,
       platform: draft.platform || null,
     }
 
@@ -314,6 +318,19 @@ export function JobCreateDialog({
                 onChange={(e) => patch('briefUrl', e.target.value || null)}
                 placeholder="https://drive.google.com/…"
               />
+            </div>
+
+            <div>
+              <label className="text-xs text-[hsl(var(--muted-foreground))]">Campaign</label>
+              <CampaignField
+                value={draft.campaign}
+                workspaceId={draft.workspaceId}
+                onChange={(next) => patch('campaign', next)}
+              />
+              <p className="text-[11px] text-[hsl(var(--muted-foreground))] mt-1">
+                Group related posts under a shared campaign name. Used by the
+                Campaign report to compare performance across the campaign.
+              </p>
             </div>
           </div>
 
