@@ -1,7 +1,6 @@
 "use client"
 
 import { useEffect, useMemo, useState } from 'react'
-import type { ReactElement } from 'react'
 import Link from 'next/link'
 import { HostedSidebar } from '@/components/hosted-sidebar'
 import { ReportsHeadline } from '@/components/reports-headline'
@@ -12,6 +11,7 @@ import { ReportsDeepDiveSummary } from '@/components/reports-deep-dive-summary'
 import { ReportsDeepDiveMonthlyChart } from '@/components/reports-deep-dive-monthly'
 import { ReportsDeepDivePlatformTable } from '@/components/reports-deep-dive-platforms'
 import { ReportsDeepDiveRecommendations } from '@/components/reports-deep-dive-recommendations'
+import { ComparisonShell } from '@/components/comparison-shell'
 import type { Job, MetricSnapshot, Workspace } from '@/lib/types'
 import { buildDeepDive } from '@/lib/quarterly'
 import { generateRecommendations } from '@/lib/recommendations'
@@ -51,9 +51,13 @@ export function ReportsShell() {
   const [toIso, setToIso] = useState<string>(initialRange.toIso)
   /** Standard = the 4.2 layout (single window, simple numbers).
    *  Deep dive = the 4.3 layout (current vs prior, monthly trends,
-   *  recommendations engine output). Both use the same /api/reports
-   *  data — only the body of the page changes. */
-  const [reportType, setReportType] = useState<'standard' | 'deepDive'>('standard')
+   *  recommendations engine output). Campaign = the 6.2 layout
+   *  (manual or campaign-filtered comparison of selected posts).
+   *  All three modes use the same /api/reports data for the parent
+   *  context (workspace + date range); only the body of the page changes. */
+  const [reportType, setReportType] = useState<
+    'standard' | 'deepDive' | 'campaign'
+  >('standard')
 
   // ---------- report data ----------
   const [data, setData] = useState<ReportsApiResponse | null>(null)
@@ -265,7 +269,7 @@ export function ReportsShell() {
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/^-|-$/g, '')
 
-      let doc: ReactElement
+      let doc: React.ReactElement
       let filename: string
 
       if (reportType === 'deepDive') {
@@ -303,7 +307,7 @@ export function ReportsShell() {
         filename = `report-${safeName}-${fromIso}-to-${toIso}.pdf`
       }
 
-      const blob = await pdf(doc as Parameters<typeof pdf>[0]).toBlob()
+      const blob = await pdf(doc as unknown as Parameters<typeof pdf>[0]).toBlob()
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
@@ -379,6 +383,7 @@ export function ReportsShell() {
             {([
               { value: 'standard', label: 'Standard' },
               { value: 'deepDive', label: 'Quarterly deep-dive' },
+              { value: 'campaign', label: 'Campaign report' },
             ] as const).map((t) => (
               <button
                 key={t.value}
@@ -459,6 +464,14 @@ export function ReportsShell() {
           <div className="rounded-2xl border bg-[hsl(var(--card))] p-10 text-center text-sm text-[hsl(var(--muted-foreground))]">
             Loading report…
           </div>
+        ) : reportType === 'campaign' ? (
+          <ComparisonShell
+            jobs={data?.jobs ?? []}
+            workspace={data?.workspace ?? null}
+            workspaceId={reportWorkspaceId}
+            fromIso={fromIso}
+            toIso={toIso}
+          />
         ) : reportType === 'standard' ? (
           <>
             <ReportsHeadline headline={headline} />
