@@ -4,7 +4,7 @@ import { Document, Page, Text, View, StyleSheet } from '@react-pdf/renderer'
 import type { Workspace } from '@/lib/types'
 import type { DeepDive, TrendDelta, MonthlyPoint } from '@/lib/quarterly'
 import type { Recommendation, Severity } from '@/lib/recommendations'
-import { directionGlyph, formatPctChange } from '@/lib/quarterly'
+import { formatPctChange } from '@/lib/quarterly'
 import { formatNumber, formatEngagementRate, formatDateShort } from '@/lib/reports'
 
 /**
@@ -54,6 +54,10 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#111827',
     marginBottom: 8,
+    // Round 7.4: explicit lineHeight prevents coverSubtitle (workspace
+    // name) from overlapping the title. See report-pdf.tsx for the
+    // full explanation — same root cause, same fix.
+    lineHeight: 1.2,
   },
   coverSubtitle: {
     fontSize: 14,
@@ -211,9 +215,16 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   topTitle: {
-    flex: 1,
+    // Round 7.4: removed `flex: 1` — this is a Text inside a column-
+    // flex parent View, where `flex: 1` doesn't widen it (the parent
+    // is column-direction, not row) but caused layout instability in
+    // @react-pdf/renderer that resulted in the title rendering on
+    // the same line as topMeta below it. Also added explicit
+    // lineHeight so the 10pt text's box matches its visual extent
+    // and topMeta's marginTop: 2 lands clear of the title's descent.
     fontSize: 10,
     color: '#111827',
+    lineHeight: 1.3,
   },
   topMeta: {
     fontSize: 8,
@@ -558,7 +569,12 @@ function SummaryTile({
       <Text style={styles.tileLabel}>{label}</Text>
       <Text style={styles.tileValue}>{value}</Text>
       <Text style={[styles.tileDelta, { color: deltaColor }]}>
-        {directionGlyph(delta.direction)} {formatPctChange(delta)}
+        {/* Round 7.4: dropped directionGlyph(). It returned ▲▼◆ which
+            aren't in Helvetica (the @react-pdf/renderer default font)
+            and rendered as a substitution placeholder. The signed
+            percentage (`+12.3%`/`-4.1%`) plus the colour already
+            encode direction unambiguously. */}
+        {formatPctChange(delta)}
       </Text>
       <Text style={styles.tileSubline}>vs {priorValue} prior</Text>
     </View>
@@ -668,7 +684,9 @@ function CellWithDelta({
     <View style={{ flex: 1.2, alignItems: 'flex-end' }}>
       <Text style={styles.tableCell}>{value}</Text>
       <Text style={[styles.tableDelta, { color }]}>
-        {directionGlyph(delta.direction)} {formatPctChange(delta)}
+        {/* Round 7.4: see SummaryTile — dropped the ▲▼◆ glyph; signed
+            percentage + colour carry the direction. */}
+        {formatPctChange(delta)}
       </Text>
     </View>
   )

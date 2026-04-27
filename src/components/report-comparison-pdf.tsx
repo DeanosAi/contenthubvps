@@ -50,6 +50,9 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#111827',
     marginBottom: 8,
+    // Round 7.4: explicit lineHeight prevents the next element from
+    // overlapping the title. See report-pdf.tsx for full reasoning.
+    lineHeight: 1.2,
   },
   coverSubtitle: {
     fontSize: 14,

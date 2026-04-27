@@ -60,6 +60,12 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#111827',
     marginBottom: 8,
+    // Round 7.4: explicit lineHeight prevents the next element
+    // (coverSubtitle with the workspace name) from rendering inside
+    // the title's descent area. Without this, @react-pdf/renderer's
+    // default lineHeight computes a tighter ascent than the visual
+    // extent of 32pt text and the subtitle overlaps the title.
+    lineHeight: 1.2,
   },
   coverSubtitle: {
     fontSize: 14,
