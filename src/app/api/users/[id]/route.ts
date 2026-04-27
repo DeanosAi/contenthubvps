@@ -11,9 +11,29 @@ const UpdateUserInput = z
   })
   .refine((v) => Object.keys(v).length > 0, { message: 'No fields to update' })
 
+/**
+ * Round 7.5: relaxed authorization to allow a non-admin user to
+ * update their OWN display name. Prior to this round only admins
+ * could PATCH any user, which left no path for a user to fix their
+ * own name — admins could rename others, but a teammate would have
+ * to ask the admin to rename them.
+ *
+ * The rules now are:
+ *   - admins can update any field on any user (name, role, password)
+ *   - non-admin users can update ONLY their own `name`
+ *     - they cannot change their own role (privilege escalation)
+ *     - they cannot change their own password through this endpoint
+ *       (passwords are reset by an admin via this same endpoint;
+ *       a future round may add a self-service password change flow)
+ *     - they cannot touch any other user
+ *
+ * Self-name-edit is a low-risk operation: name is purely cosmetic,
+ * has no security implications, and the user can already see their
+ * own name everywhere it's displayed.
+ */
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const admin = await requireAdmin()
-  if (!admin) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  const session = await getSession()
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { id } = await params
 
@@ -27,6 +47,28 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const parsed = UpdateUserInput.safeParse(body)
   if (!parsed.success) {
     return NextResponse.json({ error: 'Invalid update payload' }, { status: 400 })
+  }
+
+  const isAdmin = session.role === 'admin'
+  const isSelf = session.userId === id
+
+  // Authorization gate — see the comment on this function.
+  if (!isAdmin) {
+    if (!isSelf) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+    // Self-edit: only `name` is permitted.
+    if (parsed.data.role !== undefined || parsed.data.password !== undefined) {
+      return NextResponse.json(
+        { error: 'Only an admin can change roles or passwords' },
+        { status: 403 },
+      )
+    }
+    if (parsed.data.name === undefined) {
+      // Only field that's not allowed-or-undefined would be a
+      // contradiction with the .refine() check, but defensively:
+      return NextResponse.json({ error: 'No allowed fields to update' }, { status: 400 })
+    }
   }
 
   await ensureSchema()

@@ -60,12 +60,6 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#111827',
     marginBottom: 8,
-    // Round 7.4: explicit lineHeight prevents the next element
-    // (coverSubtitle with the workspace name) from rendering inside
-    // the title's descent area. Without this, @react-pdf/renderer's
-    // default lineHeight computes a tighter ascent than the visual
-    // extent of 32pt text and the subtitle overlaps the title.
-    lineHeight: 1.2,
   },
   coverSubtitle: {
     fontSize: 14,
@@ -183,9 +177,15 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   topPostTitle: {
-    flex: 1,
+    // Round 7.5: removed `flex: 1` and added explicit lineHeight,
+    // matching the fix made in report-deep-dive-pdf.tsx in Round 7.4.
+    // The standard report PDF had the same bug — the title sat in
+    // a column-flex parent so flex: 1 didn't widen it but caused
+    // @react-pdf/renderer layout instability that collapsed the
+    // title's height, making topPostMeta render on the same line.
     fontSize: 10,
     color: '#111827',
+    lineHeight: 1.3,
   },
   topPostMeta: {
     fontSize: 8,
