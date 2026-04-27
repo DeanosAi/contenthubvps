@@ -8,6 +8,7 @@ import type {
   CustomField,
   CustomFieldType,
   Job,
+  KanbanColumn,
   LiveMetrics,
   MetricSnapshot,
   User,
@@ -37,8 +38,6 @@ function asNumber(v: unknown, fallback = 0): number {
   return fallback
 }
 
-/** Like asNumber but null-passthrough — for nullable integer columns
- * (views, likes, etc.) where "no data" is meaningfully different from "0". */
 function asNullableNumber(v: unknown): number | null {
   if (v == null) return null
   if (typeof v === 'number') return Number.isFinite(v) ? v : null
@@ -47,6 +46,13 @@ function asNullableNumber(v: unknown): number | null {
     return Number.isFinite(n) ? n : null
   }
   return null
+}
+
+function asBoolean(v: unknown, fallback = false): boolean {
+  if (typeof v === 'boolean') return v
+  if (typeof v === 'string') return v === 'true' || v === 't' || v === '1'
+  if (typeof v === 'number') return v !== 0
+  return fallback
 }
 
 function asIsoString(v: unknown): string {
@@ -62,8 +68,6 @@ function asNullableIsoString(v: unknown): string | null {
   return s.length > 0 ? s : null
 }
 
-/** Postgres `jsonb` columns come back as already-parsed objects, but we
- * defensively also handle null and string. */
 function parseJson<T>(v: unknown, fallback: T): T {
   if (v == null) return fallback
   if (typeof v === 'string') {
@@ -116,14 +120,9 @@ function mapApprovalStatus(v: unknown): ApprovalStatus {
   return (allowed as string[]).includes(s) ? (s as ApprovalStatus) : 'none'
 }
 
-/** Coerce a raw `live_metrics_json` blob into the typed LiveMetrics shape.
- * Tolerant: missing fields become null. Returns null if the input is null
- * or an empty object. */
 export function mapLiveMetrics(raw: unknown): LiveMetrics | null {
   const parsed = parseJson<Record<string, unknown> | null>(raw, null)
   if (!parsed || typeof parsed !== 'object') return null
-  // Reject empty objects so the API doesn't return `liveMetrics: {everything null}`
-  // when the column was just initialised with `{}`.
   const m: LiveMetrics = {
     views: asNullableNumber(parsed.views),
     likes: asNullableNumber(parsed.likes),
@@ -134,8 +133,6 @@ export function mapLiveMetrics(raw: unknown): LiveMetrics | null {
     impressions: asNullableNumber(parsed.impressions),
     engagementRate: asNullableNumber(parsed.engagementRate ?? parsed.engagement_rate),
   }
-  // If every field is null, return null instead — saves callers from
-  // having to check `if (m && Object.values(m).some(v => v != null))`.
   if (Object.values(m).every((v) => v == null)) return null
   return m
 }
@@ -165,17 +162,28 @@ export function rowToWorkspace(row: Row): Workspace {
   }
 }
 
+/**
+ * Round 7.2: stage validation relaxed.
+ *
+ * Pre-7.2 this function had an allow-list and silently rewrote any
+ * unknown stage to 'brief'. With user-added custom columns now valid
+ * (their stage_key is `cust_<...>`), we accept any non-empty string.
+ *
+ * The fallback to 'brief' is preserved for the empty / null case
+ * (database integrity issue), but custom stage keys pass through.
+ */
+function safeStage(raw: unknown): string {
+  const s = String(raw ?? '').trim()
+  return s.length > 0 ? s : 'brief'
+}
+
 export function rowToJob(row: Row): Job {
   return {
     id: asString(row.id),
     workspaceId: asString(row.workspace_id),
     title: asString(row.title),
     description: asNullableString(row.description),
-    stage: ((): Job['stage'] => {
-      const allowed: Job['stage'][] = ['brief', 'production', 'ready', 'posted', 'archive']
-      const s = String(row.stage ?? 'brief')
-      return (allowed as string[]).includes(s) ? (s as Job['stage']) : 'brief'
-    })(),
+    stage: safeStage(row.stage),
     priority: asNumber(row.priority, 0),
     dueDate: asNullableIsoString(row.due_date),
     hashtags: asNullableString(row.hashtags),
@@ -200,7 +208,25 @@ export function rowToJob(row: Row): Job {
   }
 }
 
-/** Map a raw `metric_snapshots` row into the API-shaped MetricSnapshot. */
+/**
+ * Round 7.2: shape a `kanban_columns` row into the API-shaped
+ * KanbanColumn. Used by both the GET endpoint and any code that needs
+ * to splice updated columns into local state without a refetch.
+ */
+export function rowToKanbanColumn(row: Row): KanbanColumn {
+  return {
+    id: asString(row.id),
+    workspaceId: asString(row.workspace_id),
+    stageKey: asString(row.stage_key),
+    label: asString(row.label),
+    color: asString(row.color) || '#64748b',
+    sortOrder: asNumber(row.sort_order, 0),
+    isBuiltin: asBoolean(row.is_builtin, false),
+    createdAt: asIsoString(row.created_at),
+    updatedAt: asIsoString(row.updated_at),
+  }
+}
+
 export function rowToMetricSnapshot(row: Row): MetricSnapshot {
   return {
     id: asString(row.id),

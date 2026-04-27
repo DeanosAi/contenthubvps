@@ -27,7 +27,7 @@ function formatDate(d: string | null): string {
   return date.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: '2-digit' })
 }
 
-function isOverdue(dueDate: string | null, stage: JobStage): boolean {
+function isOverdue(dueDate: string | null, stage: string): boolean {
   if (!dueDate) return false
   if (stage === 'posted' || stage === 'archive') return false
   const due = new Date(dueDate)
@@ -103,8 +103,8 @@ export function JobListView({
                 <td className="px-4 py-3 text-[hsl(var(--muted-foreground))]">{wsName.get(job.workspaceId) ?? '—'}</td>
                 <td className="px-4 py-3">
                   <span className="inline-flex items-center gap-2">
-                    <span className="h-2 w-2 rounded-full" style={{ backgroundColor: STAGE_DOT[job.stage] }} />
-                    {STAGE_LABEL[job.stage]}
+                    <span className="h-2 w-2 rounded-full" style={{ backgroundColor: STAGE_DOT[job.stage as JobStage] ?? '#64748b' }} />
+                    {STAGE_LABEL[job.stage as JobStage] ?? job.stage}
                   </span>
                 </td>
                 <td className="px-4 py-3 text-[hsl(var(--muted-foreground))]">{job.platform || '—'}</td>

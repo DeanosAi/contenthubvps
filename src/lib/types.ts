@@ -3,6 +3,18 @@
 // not the raw Postgres column names (snake_case). The mapping happens in
 // src/lib/db-mappers.ts so the rest of the app never has to think about it.
 
+/**
+ * The five reserved internal stages. Reports filter on these literal
+ * values, so they're immutable forever. Round 7.2 introduces user-
+ * added custom columns whose stage_key is an arbitrary string of the
+ * form `cust_<short-uuid>`.
+ *
+ * Note: `Job.stage` at runtime can be ANY string (a custom stage_key),
+ * but we keep this union for compile-time-checked filter expressions
+ * like `job.stage === 'posted'` in reports. Code that needs to handle
+ * arbitrary stage strings should accept `string` and check membership
+ * against `BUILTIN_STAGE_KEYS`.
+ */
 export type JobStage = 'brief' | 'production' | 'ready' | 'posted' | 'archive'
 
 export type ApprovalStatus = 'none' | 'awaiting' | 'approved' | 'changes_requested'
@@ -32,13 +44,7 @@ export interface CustomField {
   value: string
 }
 
-/** A point-in-time set of social-media metrics for a job. Used both as the
- * latest cached state on `Job.liveMetrics` and as the historical record in
- * `MetricSnapshot.metrics`.
- *
- * All numeric fields are nullable because not every platform reports every
- * metric — TikTok exposes views but not reach, Instagram exposes reach but
- * not views, etc. The reports tolerate nulls. */
+/** A point-in-time set of social-media metrics for a job. */
 export interface LiveMetrics {
   views: number | null
   likes: number | null
@@ -47,20 +53,16 @@ export interface LiveMetrics {
   saves: number | null
   reach: number | null
   impressions: number | null
-  /** Engagement rate as a fraction (0.0234 = 2.34%). Stored that way to
-   * avoid double-converting back and forth. The UI formats with `* 100`. */
+  /** Engagement rate as a fraction (0.0234 = 2.34%). */
   engagementRate: number | null
 }
 
-/** Append-only historical record of a metric fetch. Reports query these
- * for trend analysis (month-over-month growth, etc). */
+/** Append-only historical record of a metric fetch. */
 export interface MetricSnapshot {
   id: string
   jobId: string
   workspaceId: string
-  /** Which platform these metrics belong to. Null for combined / unknown. */
   platform: string | null
-  /** ISO timestamp of when the snapshot was captured. */
   capturedAt: string
   metrics: LiveMetrics
 }
@@ -86,12 +88,55 @@ export interface Workspace {
   updatedAt: string
 }
 
+/**
+ * Round 7.2: per-workspace kanban column configuration.
+ *
+ * Each row maps a `stageKey` (the literal value stored in `Job.stage`)
+ * to a user-facing label, colour, and sort order.
+ *
+ * Built-in columns (the five reserved stages) have `isBuiltin: true`
+ * and their `stageKey` is one of the JobStage union values. They can
+ * be renamed and reordered but NOT deleted — reports depend on them.
+ *
+ * Custom columns have `isBuiltin: false` and `stageKey` of the form
+ * `cust_<short-uuid>`. They can be renamed, reordered, and deleted
+ * freely. Posts in custom columns don't appear in any reports (the
+ * caption "Posts here won't appear in reports" makes this explicit
+ * in the UI).
+ */
+export interface KanbanColumn {
+  id: string
+  workspaceId: string
+  /** Stored in `jobs.stage` — built-ins use the JobStage values, customs
+   *  use `cust_<short-uuid>`. */
+  stageKey: string
+  /** User-facing column header. */
+  label: string
+  /** Hex colour used for the column dot and tinted backdrop. */
+  color: string
+  sortOrder: number
+  isBuiltin: boolean
+  createdAt: string
+  updatedAt: string
+}
+
 export interface Job {
   id: string
   workspaceId: string
   title: string
   description: string | null
-  stage: JobStage
+  /**
+   * Round 7.2: at runtime this can be any non-empty string (one of the
+   * five built-in JobStage values OR a custom `cust_<...>` key). The
+   * type is widened to `string` here so component code that passes
+   * stage values around doesn't have to cast everywhere.
+   *
+   * Reports and other code that branches on specific stages should
+   * compare against the literal strings: `job.stage === 'posted'` etc.
+   * Those checks remain compile-time safe via the JobStage union when
+   * needed.
+   */
+  stage: string
   priority: number
   dueDate: string | null
   hashtags: string | null
@@ -104,31 +149,18 @@ export interface Job {
   approvalStatus: ApprovalStatus
   assignedTo: string | null
   customFields: CustomField[]
-  /** Free-text campaign tag. Multiple jobs sharing the same string are
-   * considered part of the same campaign. Per-workspace — the autocomplete
-   * endpoint only returns values within the calling workspace, so the
-   * same string under two workspaces is treated as two unrelated campaigns.
-   * Used by the campaign-comparison report in Round 6.2. */
   campaign: string | null
   facebookLiveUrl: string | null
   facebookPostId: string | null
   instagramLiveUrl: string | null
-  /** Stable timestamp of when the stage moved to `posted`. Null while the
-   * job is still pre-post. Reports use this (not updatedAt or dueDate)
-   * for "posts in date range" calculations. */
   postedAt: string | null
-  /** Latest cached metric values from the most recent Apify fetch. Null
-   * until the first fetch happens. The kanban card / detail panel read
-   * from here for at-a-glance display. */
   liveMetrics: LiveMetrics | null
-  /** When `liveMetrics` was last refreshed. Null if never fetched. */
   lastMetricsFetchAt: string | null
   createdAt: string
   updatedAt: string
 }
 
-/** Key-value app settings. Stored in DB so they survive restarts and so
- * branding/preferences set by an admin show up for the whole team. */
+/** Key-value app settings. */
 export type SettingKey =
   | 'app.name'
   | 'app.companyName'
@@ -151,4 +183,20 @@ export interface SessionUser {
   userId: string
   email: string
   role: 'admin' | 'member'
+}
+
+/**
+ * Helper: is this stage one of the five built-in reserved stages?
+ *
+ * Round 7.2 adds custom user stages whose keys are NOT in this list.
+ * Reports use this to skip over custom-stage jobs at the filtering step.
+ */
+export function isBuiltinStage(stage: string): stage is JobStage {
+  return (
+    stage === 'brief' ||
+    stage === 'production' ||
+    stage === 'ready' ||
+    stage === 'posted' ||
+    stage === 'archive'
+  )
 }

@@ -28,13 +28,13 @@ export async function ensureSchema(): Promise<void> {
   // ---------- users ----------
   await pool.query(`
     CREATE TABLE IF NOT EXISTS users (
-      id TEXT PRIMARY KEY,
-      email TEXT NOT NULL UNIQUE,
-      password_hash TEXT NOT NULL,
-      name TEXT,
-      role TEXT NOT NULL DEFAULT 'member',
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      id              TEXT PRIMARY KEY,
+      email           TEXT NOT NULL UNIQUE,
+      password_hash   TEXT NOT NULL,
+      name            TEXT,
+      role            TEXT NOT NULL DEFAULT 'member',
+      created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
   `)
   await pool.query(`CREATE INDEX IF NOT EXISTS users_email_idx ON users (email);`)
@@ -42,15 +42,15 @@ export async function ensureSchema(): Promise<void> {
   // ---------- workspaces ----------
   await pool.query(`
     CREATE TABLE IF NOT EXISTS workspaces (
-      id TEXT PRIMARY KEY,
-      owner_id TEXT NOT NULL,
-      name TEXT NOT NULL,
-      color TEXT NOT NULL DEFAULT '#8b5cf6',
-      sort_order INTEGER NOT NULL DEFAULT 0,
-      facebook_page_url TEXT,
-      instagram_page_url TEXT,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      id                   TEXT PRIMARY KEY,
+      owner_id             TEXT NOT NULL,
+      name                 TEXT NOT NULL,
+      color                TEXT NOT NULL DEFAULT '#8b5cf6',
+      sort_order           INTEGER NOT NULL DEFAULT 0,
+      facebook_page_url    TEXT,
+      instagram_page_url   TEXT,
+      created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
   `)
   await pool.query(`ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS facebook_page_url TEXT;`)
@@ -59,21 +59,22 @@ export async function ensureSchema(): Promise<void> {
   // ---------- jobs ----------
   await pool.query(`
     CREATE TABLE IF NOT EXISTS jobs (
-      id TEXT PRIMARY KEY,
-      workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
-      title TEXT NOT NULL,
-      description TEXT,
-      stage TEXT NOT NULL DEFAULT 'brief',
-      priority INTEGER NOT NULL DEFAULT 0,
-      due_date TIMESTAMPTZ,
-      hashtags TEXT,
-      platform TEXT,
-      live_url TEXT,
-      notes TEXT,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      id              TEXT PRIMARY KEY,
+      workspace_id    TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+      title           TEXT NOT NULL,
+      description     TEXT,
+      stage           TEXT NOT NULL DEFAULT 'brief',
+      priority        INTEGER NOT NULL DEFAULT 0,
+      due_date        TIMESTAMPTZ,
+      hashtags        TEXT,
+      platform        TEXT,
+      live_url        TEXT,
+      notes           TEXT,
+      created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
   `)
+
   // Hosted-safe extensions added in earlier rounds.
   await pool.query(`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS content_type TEXT;`)
   await pool.query(`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS brief_url TEXT;`)
@@ -86,108 +87,145 @@ export async function ensureSchema(): Promise<void> {
   await pool.query(`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS custom_fields_json JSONB;`)
 
   // ---------- Round 4.1 additions ----------
-  // posted_at: stable timestamp of when a job's stage transitioned to
-  // 'posted'. Distinct from updated_at (which moves with any later edit)
-  // and from due_date (which is the planned date, not actual). Reports
-  // use this to compute "posts in date range".
   await pool.query(`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS posted_at TIMESTAMPTZ;`)
-
-  // live_metrics_json: latest cached metric snapshot for at-a-glance
-  // display on cards / detail panel. Always reflects the most recent
-  // fetch. Historical values live in metric_snapshots (below).
   await pool.query(`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS live_metrics_json JSONB;`)
-  // last_metrics_fetch_at: when the live_metrics_json was last refreshed.
-  // Used by the UI to show "fetched 3 hours ago" hints and by background
-  // jobs to decide when to re-fetch.
   await pool.query(`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS last_metrics_fetch_at TIMESTAMPTZ;`)
 
   // ---------- Round 6.1 additions ----------
-  // campaign: free-text campaign name. Lets users group posts under a
-  // shared label (e.g. "Spring Launch 2026") and later filter the
-  // campaign-comparison report to that group. Per-workspace conceptually
-  // — the autocomplete endpoint only returns distinct values within
-  // the calling workspace, so the same string under two workspaces is
-  // treated as two unrelated campaigns.
-  //
-  // No separate `campaigns` table: campaigns are essentially tags for a
-  // small team. If management features become important later (rename
-  // a campaign across many posts at once, share a campaign across
-  // workspaces, etc.) we can normalise then.
   await pool.query(`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS campaign TEXT;`)
-  // Partial index — only rows that actually have a campaign value are
-  // indexed. Most jobs probably won't, so this stays small. Speeds up
-  // both the autocomplete query (DISTINCT campaign WHERE workspace_id=X)
-  // and the campaign-filtered reports.
   await pool.query(`
     CREATE INDEX IF NOT EXISTS jobs_workspace_campaign_idx
     ON jobs (workspace_id, campaign)
     WHERE campaign IS NOT NULL;
   `)
 
-  // ---------- metric_snapshots ----------
-  // Append-only history of every metric fetch we record. One row per
-  // fetch per platform. Reports query this for trend analysis (month-
-  // over-month growth, engagement-rate over time, etc).
+  // ---------- Round 7.2: kanban_columns ----------
+  // Per-workspace kanban column configuration. Lets users rename built-in
+  // columns (e.g. "Posted" → "Posted/Live"), reorder them, and add
+  // entirely new columns for their own workflow needs.
   //
-  // Why we keep BOTH live_metrics_json on the job AND a snapshots table:
-  //   - jobs.live_metrics_json answers "what's the current state?" cheaply,
-  //     no JOIN needed for kanban cards.
-  //   - metric_snapshots answers "how did this evolve?" — slower per-row
-  //     but only relevant for reports.
+  // Design notes:
+  //
+  // - `stage_key` is the literal value stored in `jobs.stage`. For the
+  //   five reserved stages this is one of brief/production/ready/
+  //   posted/archive — those keys are immutable forever because
+  //   reports filter on them. For user-added columns the key is
+  //   generated as `cust_<short-uuid>` so it can never collide with a
+  //   future built-in stage we might introduce.
+  //
+  // - `label` is the user-facing column header. Editable for ALL
+  //   columns. Built-ins start with the historical defaults; the user
+  //   can rename them freely without affecting reports.
+  //
+  // - `is_builtin` distinguishes the five reserved stages from
+  //   user-added ones. Built-ins can be renamed and reordered but NOT
+  //   deleted (the column is a safety hatch enforced by the API).
+  //   User-added columns can be deleted.
+  //
+  // - Existing workspaces get auto-seeded with the five built-in rows
+  //   below so the migration is invisible — every workspace ends up
+  //   with the same default board it had before.
   await pool.query(`
-    CREATE TABLE IF NOT EXISTS metric_snapshots (
-      id TEXT PRIMARY KEY,
-      job_id TEXT NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
-      workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
-      platform TEXT,
-      captured_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      views INTEGER,
-      likes INTEGER,
-      comments INTEGER,
-      shares INTEGER,
-      saves INTEGER,
-      reach INTEGER,
-      impressions INTEGER,
-      engagement_rate NUMERIC(8, 4),
-      raw_json JSONB
+    CREATE TABLE IF NOT EXISTS kanban_columns (
+      id            TEXT PRIMARY KEY,
+      workspace_id  TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+      stage_key     TEXT NOT NULL,
+      label         TEXT NOT NULL,
+      color         TEXT NOT NULL DEFAULT '#64748b',
+      sort_order    INTEGER NOT NULL DEFAULT 0,
+      is_builtin    BOOLEAN NOT NULL DEFAULT FALSE,
+      created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (workspace_id, stage_key)
     );
   `)
-  // Reports filter heavily by workspace_id + captured_at range — this
-  // index makes those queries fast.
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS kanban_columns_workspace_sort_idx
+    ON kanban_columns (workspace_id, sort_order);
+  `)
+
+  // Auto-seed: any workspace with no kanban_columns rows gets the five
+  // built-ins inserted at the historical default labels and order.
+  // This is the migration path for existing data — no manual step
+  // required, just runs once per workspace on first hit after deploy.
+  //
+  // The default for the 'posted' column is "Posted/Live" per Round 7.2
+  // brief; existing teams can rename in either direction freely.
+  await pool.query(`
+    WITH workspaces_needing_seed AS (
+      SELECT w.id AS workspace_id
+      FROM workspaces w
+      LEFT JOIN kanban_columns kc ON kc.workspace_id = w.id
+      WHERE kc.id IS NULL
+      GROUP BY w.id
+    ),
+    defaults AS (
+      SELECT * FROM (VALUES
+        ('brief',      'Brief',             '#64748b', 0),
+        ('production', 'In Production',     '#3b82f6', 1),
+        ('ready',      'Ready for Posting', '#f59e0b', 2),
+        ('posted',     'Posted/Live',       '#10b981', 3),
+        ('archive',    'Archive',           '#4b5563', 4)
+      ) AS d(stage_key, label, color, sort_order)
+    )
+    INSERT INTO kanban_columns (id, workspace_id, stage_key, label, color, sort_order, is_builtin)
+    SELECT
+      gen_random_uuid()::text,
+      w.workspace_id,
+      d.stage_key,
+      d.label,
+      d.color,
+      d.sort_order,
+      TRUE
+    FROM workspaces_needing_seed w
+    CROSS JOIN defaults d;
+  `)
+
+  // ---------- metric_snapshots ----------
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS metric_snapshots (
+      id                TEXT PRIMARY KEY,
+      job_id            TEXT NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+      workspace_id      TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+      platform          TEXT,
+      captured_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      views             INTEGER,
+      likes             INTEGER,
+      comments          INTEGER,
+      shares            INTEGER,
+      saves             INTEGER,
+      reach             INTEGER,
+      impressions       INTEGER,
+      engagement_rate   NUMERIC(8, 4),
+      raw_json          JSONB
+    );
+  `)
   await pool.query(`
     CREATE INDEX IF NOT EXISTS metric_snapshots_workspace_captured_idx
     ON metric_snapshots (workspace_id, captured_at DESC);
   `)
-  // Lookups for "all snapshots of this job" (used when rendering the
-  // metric history on the detail panel later).
   await pool.query(`
     CREATE INDEX IF NOT EXISTS metric_snapshots_job_captured_idx
     ON metric_snapshots (job_id, captured_at DESC);
   `)
 
   // ---------- backfill posted_at for existing posted jobs ----------
-  // Jobs that are already in stage='posted' but predate this column
-  // would otherwise be invisible to date-range reports. We backfill
-  // their posted_at from updated_at as a one-time approximation. This
-  // runs once (subsequent calls are no-ops because posted_at IS NOT NULL).
   await pool.query(`
     UPDATE jobs
-    SET posted_at = updated_at
-    WHERE stage = 'posted' AND posted_at IS NULL;
+       SET posted_at = updated_at
+     WHERE stage = 'posted' AND posted_at IS NULL;
   `)
 
   // ---------- settings ----------
   await pool.query(`
     CREATE TABLE IF NOT EXISTS app_settings (
-      key TEXT PRIMARY KEY,
-      value TEXT,
-      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      key         TEXT PRIMARY KEY,
+      value       TEXT,
+      updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
   `)
 
   // ---------- bootstrap admin ----------
-  // If there are no users yet AND ADMIN_EMAIL/ADMIN_PASSWORD are present in
-  // the environment, create the first admin user from those values.
   const userCountRes = await pool.query<{ count: string }>('SELECT COUNT(*)::text AS count FROM users')
   const userCount = Number(userCountRes.rows[0]?.count ?? 0)
   if (userCount === 0) {
@@ -216,3 +254,25 @@ export async function ensureSchema(): Promise<void> {
 export function markSchemaDirty(): void {
   globalForPg.schemaReady = false
 }
+
+/**
+ * The five reserved stage keys. Reports filter on these literal values,
+ * so they are immutable forever. Custom user-added columns get keys of
+ * the form `cust_<short-uuid>` to guarantee no collision.
+ */
+export const BUILTIN_STAGE_KEYS = ['brief', 'production', 'ready', 'posted', 'archive'] as const
+
+/** Default seed data — exported so the API can re-create defaults if the
+ *  user manages to delete all their columns somehow (defensive). */
+export const BUILTIN_COLUMN_DEFAULTS: Array<{
+  stage_key: (typeof BUILTIN_STAGE_KEYS)[number]
+  label: string
+  color: string
+  sort_order: number
+}> = [
+  { stage_key: 'brief',      label: 'Brief',             color: '#64748b', sort_order: 0 },
+  { stage_key: 'production', label: 'In Production',     color: '#3b82f6', sort_order: 1 },
+  { stage_key: 'ready',      label: 'Ready for Posting', color: '#f59e0b', sort_order: 2 },
+  { stage_key: 'posted',     label: 'Posted/Live',       color: '#10b981', sort_order: 3 },
+  { stage_key: 'archive',    label: 'Archive',           color: '#4b5563', sort_order: 4 },
+]
