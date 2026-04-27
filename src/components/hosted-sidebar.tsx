@@ -119,7 +119,7 @@ export function HostedSidebar({
         <div className="h-8 w-8 rounded-lg bg-[hsl(var(--primary))]/15 flex items-center justify-center">
           <div className="h-4 w-4 rounded bg-[hsl(var(--primary))]" />
         </div>
-        <h1 className="text-lg font-bold">Content Hub</h1>
+        <h1 className="text-lg font-bold text-[hsl(var(--foreground))]">Content Hub</h1>
       </div>
 
       {/* Page navigation */}
@@ -210,7 +210,11 @@ export function HostedSidebar({
                                   className="w-2.5 h-2.5 rounded-full shrink-0"
                                   style={{ backgroundColor: workspace.color }}
                                 />
-                                <span className="text-sm truncate">{workspace.name}</span>
+                                <span className={`text-sm truncate ${
+                                  selectedWorkspaceId === workspace.id
+                                    ? 'text-[hsl(var(--accent-foreground))] font-medium'
+                                    : 'text-[hsl(var(--foreground))]'
+                                }`}>{workspace.name}</span>
                               </div>
 
                               <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">

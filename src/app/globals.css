@@ -1,64 +1,91 @@
 @import "tailwindcss";
 
 /*
- * Round 7.1: light theme is now the default.
+ * Round 7.1.1 — theme refit.
  *
- * The :root values are the LIGHT theme (Monday-inspired: white surfaces,
- * light grey app background, vibrant accents). A .theme-dark class on
- * <html> flips to the original dark theme. The toggle is wired in
- * src/lib/theme.ts and a small bootstrap script in app/layout.tsx
- * applies the saved choice before paint to avoid flash-of-wrong-theme.
+ * Round 7.1 used `:root { ...light vars... } .theme-dark { ...dark... }`
+ * with `:root:not(.theme-dark)` for theme-specific selectors (body
+ * gradient, color-scheme, shadow utility). That structure had two
+ * problems:
  *
- * The contract is "every component reads from these CSS variables", so
- * adding new themes later (Round 7.3) means defining new variable sets
- * — no component changes.
+ *   1. If neither class was applied (e.g. SSR before the bootstrap
+ *      script ran, or the script was missing), :root values painted
+ *      but the cascade-specific overrides did not, producing a half-
+ *      themed page.
+ *   2. The `:not()` selectors fight Tailwind v4's compile order and
+ *      sometimes lost to other rules with equal specificity.
  *
- * Variable naming follows the shadcn/Tailwind convention so existing
- * `bg-[hsl(var(--card))]` etc. utilities keep working unchanged.
+ * 7.1.1 makes themes EXPLICIT — both .theme-light and .theme-dark
+ * are real classes. The bootstrap script applies one of them
+ * unconditionally on every load. There is no implicit "default" — if
+ * something goes wrong and neither class is applied, the body falls
+ * back to safe light values via direct properties on body{}, not via
+ * the variable system.
+ *
+ * Light theme is also tightened to match the user's reference (Monday
+ * dashboard): pale cool-grey page, pure white cards with visible drop
+ * shadows, dark text on cards, vibrant chip palette for badges.
  */
 
-:root {
-  /* App surface — the page background behind cards. Soft warm grey,
-     not pure white; pure white feels clinical. */
-  --background: 220 24% 97%;
-  --foreground: 222 30% 14%;
+/* ============================================================
+ * SAFE DEFAULTS — applied to bare body{} so even if no theme
+ * class is on <html>, the page still renders readably (light).
+ * ============================================================ */
+body {
+  background-color: hsl(213 38% 96%);
+  color: hsl(222 30% 14%);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
 
-  /* Card surfaces — true white so they read as "raised paper". */
+/* ============================================================
+ * LIGHT THEME — Monday-inspired
+ * ============================================================ */
+.theme-light {
+  /* Page surface — pale cool baby-blue, the "Monday vibe" the user
+     called out. Not pure white; pure white feels clinical and makes
+     the cards flat. */
+  --background: 213 38% 96%;
+  --foreground: 222 32% 14%;
+
+  /* Card surfaces — pure white. The contrast with the cool-blue page
+     plus a real drop shadow makes them feel like raised paper. */
   --card: 0 0% 100%;
-  --card-foreground: 222 30% 14%;
+  --card-foreground: 222 32% 14%;
 
   --popover: 0 0% 100%;
-  --popover-foreground: 222 30% 14%;
+  --popover-foreground: 222 32% 14%;
 
-  /* Primary — Monday-style vibrant indigo/violet. Used for buttons,
-     active states, and highlights. */
+  /* Primary — Monday-style vibrant indigo/violet for active states,
+     buttons, and highlights. */
   --primary: 250 84% 60%;
   --primary-foreground: 0 0% 100%;
 
-  /* Secondary surfaces — for soft pill backgrounds, muted buttons. */
+  /* Secondary surfaces — for muted buttons and soft pill backgrounds.
+     A touch warmer than --background so soft chips don't disappear
+     against the page. */
   --secondary: 220 22% 92%;
-  --secondary-foreground: 222 30% 14%;
+  --secondary-foreground: 222 30% 18%;
 
   /* Muted — used for subdued text and quiet backgrounds. */
   --muted: 220 22% 94%;
   --muted-foreground: 220 12% 42%;
 
-  /* Accent — used for hover surfaces and active row tints. Soft, not
-     loud, since we want the primary colour to do the heavy lifting. */
-  --accent: 220 22% 92%;
-  --accent-foreground: 222 30% 18%;
+  /* Accent — used for hover surfaces and active row tints. Soft
+     indigo-grey so it pairs with the indigo primary. */
+  --accent: 250 30% 94%;
+  --accent-foreground: 250 60% 30%;
 
   --destructive: 358 70% 56%;
   --destructive-foreground: 0 0% 100%;
 
-  /* Border / input — light grey lines that separate surfaces. */
+  /* Borders — slightly darker than on Monday because some of our
+     surfaces (tile rows) need visible separation. */
   --border: 220 18% 88%;
   --input: 220 18% 88%;
   --ring: 250 84% 60%;
 
-  /* Round 7.1 additions: a small palette of vibrant chip colours used
-     for badges, kanban column accents, and chart series. Defined here
-     so light + dark themes can specialise them. */
+  /* Vibrant chip palette — used for stage badges, kanban accents,
+     and chart series. Defined per-theme so dark can desaturate. */
   --chip-blue: 213 88% 56%;
   --chip-green: 152 64% 44%;
   --chip-amber: 38 92% 52%;
@@ -66,9 +93,13 @@
   --chip-purple: 264 72% 58%;
   --chip-pink: 332 78% 60%;
   --chip-teal: 184 66% 42%;
+
+  color-scheme: light;
 }
 
-/* Dark theme — the previous default, preserved for users who prefer it. */
+/* ============================================================
+ * DARK THEME — preserved from earlier rounds
+ * ============================================================ */
 .theme-dark {
   --background: 222 28% 12%;
   --foreground: 210 32% 94%;
@@ -98,65 +129,44 @@
   --chip-purple: 264 62% 64%;
   --chip-pink: 332 68% 64%;
   --chip-teal: 184 56% 48%;
+
+  color-scheme: dark;
 }
 
-body {
+/* ============================================================
+ * BODY PAINTING — driven by the theme class on <html>.
+ * No `:not()` selectors; explicit ancestor each time.
+ * ============================================================ */
+.theme-light body {
   color: hsl(var(--foreground));
-  background: hsl(var(--background));
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-}
-
-/*
- * Light theme gets a subtle radial wash so the page doesn't feel flat.
- * Dark theme keeps the original purple/cyan glow to retain its mood.
- */
-:root:not(.theme-dark) body {
   background:
-    radial-gradient(circle at top left, hsla(250, 84%, 70%, 0.06), transparent 38%),
-    radial-gradient(circle at top right, hsla(196, 80%, 60%, 0.05), transparent 32%),
+    radial-gradient(circle at top left, hsla(250, 84%, 70%, 0.05), transparent 38%),
+    radial-gradient(circle at top right, hsla(196, 80%, 60%, 0.04), transparent 32%),
     hsl(var(--background));
 }
 
 .theme-dark body {
+  color: hsl(var(--foreground));
   background:
     radial-gradient(circle at top left, hsla(258, 70%, 62%, 0.12), transparent 32%),
-    radial-gradient(circle at top right, hsla(196, 80%, 62%, 0.1), transparent 28%),
+    radial-gradient(circle at top right, hsla(196, 80%, 62%, 0.10), transparent 28%),
     linear-gradient(180deg, hsl(var(--background)) 0%, hsl(222 24% 15%) 100%);
 }
 
+/* Default border colour. The Tailwind 'border' utility applies
+   the *width*; this rule supplies the colour. */
 * {
   border-color: hsl(var(--border));
 }
 
-/*
- * Native <select> and <option> elements need explicit theming because
- * the open dropdown is OS-rendered. We tell the browser which colour
- * scheme to use via `color-scheme` and paint the <option> rows with
- * theme variables.
- *
- * Round 7.1: `color-scheme` is now driven by the theme — `light` by
- * default, `dark` when .theme-dark is applied — so dropdowns match.
- */
+/* ============================================================
+ * Native dropdown / picker theming. <select> and date inputs
+ * use OS-rendered popups; we have to tell the browser which
+ * scheme to use via color-scheme (set on the theme classes).
+ * The <option> background fix below covers Firefox specifically.
+ * ============================================================ */
 select {
   color: hsl(var(--foreground));
-}
-
-:root:not(.theme-dark) select,
-:root:not(.theme-dark) input[type="date"],
-:root:not(.theme-dark) input[type="time"],
-:root:not(.theme-dark) input[type="datetime-local"],
-:root:not(.theme-dark) input[type="month"],
-:root:not(.theme-dark) input[type="week"] {
-  color-scheme: light;
-}
-
-.theme-dark select,
-.theme-dark input[type="date"],
-.theme-dark input[type="time"],
-.theme-dark input[type="datetime-local"],
-.theme-dark input[type="month"],
-.theme-dark input[type="week"] {
-  color-scheme: dark;
 }
 
 select option {
@@ -169,11 +179,10 @@ select option:checked {
   color: hsl(var(--accent-foreground));
 }
 
-/*
- * Round 7.1: a small set of utility classes for the vibrant chip
- * colours. Used by stage badges and kanban column accents — saves
- * components from inlining the same hsl strings everywhere.
- */
+/* ============================================================
+ * Vibrant chip utility classes — used by stage badges, kanban
+ * column accents, etc. Saves components from inlining hsl.
+ * ============================================================ */
 .chip-blue   { background: hsl(var(--chip-blue)   / 0.12); color: hsl(var(--chip-blue));   }
 .chip-green  { background: hsl(var(--chip-green)  / 0.12); color: hsl(var(--chip-green));  }
 .chip-amber  { background: hsl(var(--chip-amber)  / 0.14); color: hsl(var(--chip-amber));  }
@@ -182,11 +191,17 @@ select option:checked {
 .chip-pink   { background: hsl(var(--chip-pink)   / 0.12); color: hsl(var(--chip-pink));   }
 .chip-teal   { background: hsl(var(--chip-teal)   / 0.14); color: hsl(var(--chip-teal));   }
 
-/*
- * Card shadow utility — light theme gets a real soft shadow (Monday
- * cards have visible shadows that anchor them on white). Dark theme
- * gets nothing because shadows on dark backgrounds look dirty.
- */
-:root:not(.theme-dark) .surface-shadow {
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 4px 12px rgba(15, 23, 42, 0.06);
+/* ============================================================
+ * Card shadow — Round 7.1.1 strengthened to be clearly visible
+ * on the pale page background, matching Monday's card depth.
+ * ============================================================ */
+.theme-light .surface-shadow {
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.06),
+    0 4px 16px rgba(15, 23, 42, 0.08);
+}
+
+.theme-dark .surface-shadow {
+  /* No shadow on dark — shadows on dark backgrounds look dirty. */
+  box-shadow: none;
 }

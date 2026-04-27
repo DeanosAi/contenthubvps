@@ -26,7 +26,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`theme-light ${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <head>
         {/* eslint-disable-next-line @next/next/no-sync-scripts */}

@@ -502,7 +502,7 @@ export function AppShell() {
                 + New job
               </button>
               <button
-                className="rounded-lg border border-[hsl(var(--border))] px-4 py-2 text-sm disabled:opacity-50"
+                className="rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--card))] text-[hsl(var(--foreground))] hover:bg-[hsl(var(--accent))] transition-colors px-4 py-2 text-sm disabled:opacity-50"
                 onClick={refreshWorkspaceMetrics}
                 disabled={!selectedWorkspaceId || refreshState != null}
                 title={
@@ -516,7 +516,7 @@ export function AppShell() {
                   : 'Refresh metrics'}
               </button>
               <button
-                className="rounded-lg border border-[hsl(var(--border))] px-4 py-2 text-sm text-[hsl(var(--foreground))]"
+                className="rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--card))] text-[hsl(var(--foreground))] hover:bg-[hsl(var(--accent))] transition-colors px-4 py-2 text-sm"
                 onClick={logout}
               >
                 Log out
@@ -525,7 +525,7 @@ export function AppShell() {
           </section>
 
           {errorMessage && (
-            <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-700 dark:text-red-200 flex items-center justify-between">
+            <div className="rounded-lg border border-[hsl(var(--destructive))]/30 bg-[hsl(var(--destructive))]/10 px-4 py-3 text-sm text-[hsl(var(--destructive))] flex items-center justify-between">
               <span>{errorMessage}</span>
               <button className="text-xs underline" onClick={() => setErrorMessage(null)}>
                 Dismiss
