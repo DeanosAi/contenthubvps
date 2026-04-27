@@ -21,36 +21,53 @@ interface WidgetDef {
   caption?: string
 }
 
+/**
+ * Round 7.2b changes:
+ *   - "In flight" → "Active jobs" (the old name was opaque jargon).
+ *     The widget key stays `inFlight` so existing filter-routing
+ *     code in app-shell continues to work without churn.
+ *   - "Recently posted" → "Recently posted/live" to match the new
+ *     kanban column label ("Posted/Live").
+ */
 const WIDGETS: WidgetDef[] = [
   { key: 'overdue', label: 'Overdue', accent: 'red', caption: 'Past due, not yet posted' },
   { key: 'dueThisWeek', label: 'Due this week', accent: 'amber', caption: 'Next 7 days' },
   { key: 'awaitingApproval', label: 'Awaiting approval', accent: 'cyan', caption: 'Needs client sign-off' },
-  { key: 'recentlyPosted', label: 'Recently posted', accent: 'emerald', caption: 'Last 7 days' },
-  { key: 'inFlight', label: 'In flight', accent: 'slate', caption: 'Excluding archive' },
+  { key: 'recentlyPosted', label: 'Recently posted/live', accent: 'emerald', caption: 'Last 7 days' },
+  { key: 'inFlight', label: 'Active jobs', accent: 'slate', caption: 'Excluding archive' },
 ]
 
+/**
+ * Round 7.2b colour palette — light theme.
+ *
+ * Pre-7.2b these used `text-{color}-300` for the count and ring
+ * intensities tuned for dark backgrounds, which rendered as washed-
+ * out pastels on the slate-100 page. New scheme: saturated -700 text
+ * for readability, -50 background tints for visible cards, -200/-300
+ * borders that work on white.
+ */
 const ACCENT_RING: Record<WidgetDef['accent'], string> = {
-  red: 'ring-red-500/30 hover:ring-red-500/60',
-  amber: 'ring-amber-500/30 hover:ring-amber-500/60',
-  cyan: 'ring-cyan-500/30 hover:ring-cyan-500/60',
-  emerald: 'ring-emerald-500/30 hover:ring-emerald-500/60',
-  slate: 'ring-slate-500/30 hover:ring-slate-500/60',
+  red: 'ring-red-200 hover:ring-red-400',
+  amber: 'ring-amber-200 hover:ring-amber-400',
+  cyan: 'ring-cyan-200 hover:ring-cyan-400',
+  emerald: 'ring-emerald-200 hover:ring-emerald-400',
+  slate: 'ring-slate-200 hover:ring-slate-400',
 }
 
 const ACCENT_TEXT: Record<WidgetDef['accent'], string> = {
-  red: 'text-red-300',
-  amber: 'text-amber-300',
-  cyan: 'text-cyan-300',
-  emerald: 'text-emerald-300',
-  slate: 'text-slate-300',
+  red: 'text-red-700',
+  amber: 'text-amber-700',
+  cyan: 'text-cyan-700',
+  emerald: 'text-emerald-700',
+  slate: 'text-slate-700',
 }
 
 const ACCENT_DOT: Record<WidgetDef['accent'], string> = {
-  red: 'bg-red-400',
-  amber: 'bg-amber-400',
-  cyan: 'bg-cyan-400',
-  emerald: 'bg-emerald-400',
-  slate: 'bg-slate-400',
+  red: 'bg-red-500',
+  amber: 'bg-amber-500',
+  cyan: 'bg-cyan-500',
+  emerald: 'bg-emerald-500',
+  slate: 'bg-slate-500',
 }
 
 /**
@@ -60,8 +77,8 @@ const ACCENT_DOT: Record<WidgetDef['accent'], string> = {
  *
  * The widgets compute their counts from the FULL job list (not the
  * already-filtered one) — otherwise applying a filter would zero-out
- * the other widgets, which is confusing. The "in flight" total includes
- * everything not archived and is the headline metric on the right.
+ * the other widgets, which is confusing. The "Active jobs" total
+ * includes everything not archived and is the headline metric on the right.
  */
 export function DashboardWidgets({
   jobs,
@@ -96,7 +113,7 @@ export function DashboardWidgets({
             key={w.key}
             type="button"
             onClick={() => onSelectWidget(isActive ? null : w.key)}
-            className={`text-left rounded-2xl border bg-[hsl(var(--card))] p-4 ring-1 ring-transparent transition-all ${
+            className={`text-left rounded-2xl border border-slate-200 bg-white surface-shadow p-4 ring-1 ring-transparent transition-all ${
               isActive
                 ? `${ACCENT_RING[w.accent]} ring-2`
                 : `${ACCENT_RING[w.accent]} hover:ring-1`
@@ -105,16 +122,16 @@ export function DashboardWidgets({
           >
             <div className="flex items-center gap-2">
               <span className={`h-2 w-2 rounded-full ${ACCENT_DOT[w.accent]}`} />
-              <span className="text-xs uppercase tracking-wider text-[hsl(var(--muted-foreground))]">
+              <span className="text-xs uppercase tracking-wider text-slate-600 font-semibold">
                 {w.label}
               </span>
             </div>
             <p className={`mt-2 text-3xl font-bold ${ACCENT_TEXT[w.accent]}`}>{value}</p>
             {w.caption && (
-              <p className="mt-1 text-[11px] text-[hsl(var(--muted-foreground))]">{w.caption}</p>
+              <p className="mt-1 text-[11px] text-slate-500">{w.caption}</p>
             )}
             {isActive && (
-              <p className="mt-2 text-[10px] uppercase tracking-wider text-[hsl(var(--primary))]">
+              <p className="mt-2 text-[10px] uppercase tracking-wider text-indigo-700 font-semibold">
                 Filtering kanban — click again to clear
               </p>
             )}

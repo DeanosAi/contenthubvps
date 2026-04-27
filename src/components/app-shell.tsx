@@ -15,12 +15,17 @@ import {
   type JobFilterState,
   type SortKey,
 } from '@/lib/job-filters'
-import type { Job, JobStage, Workspace } from '@/lib/types'
+import type { Job, KanbanColumn, Workspace } from '@/lib/types'
 
 export function AppShell() {
   // ---------- top-level data ----------
   const [workspaces, setWorkspaces] = useState<Workspace[]>([])
   const [jobs, setJobs] = useState<Job[]>([])
+  /** Round 7.2b: per-workspace kanban column config. Loaded
+   *  whenever the selected workspace changes. The kanban,
+   *  dashboard filters, list view, and detail panel all consume
+   *  this for their stage rendering. */
+  const [columns, setColumns] = useState<KanbanColumn[]>([])
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string>('')
   const [selectedJob, setSelectedJob] = useState<Job | null>(null)
 
@@ -74,6 +79,26 @@ export function AppShell() {
     setJobs(data)
   }
 
+  /** Round 7.2b: load the per-workspace kanban column config.
+   *  Failures are non-fatal — we surface an error but the UI degrades
+   *  gracefully (kanban shows an empty state, list view shows raw
+   *  stage_keys as fallback labels). */
+  async function loadColumns(workspaceId: string) {
+    if (!workspaceId) {
+      setColumns([])
+      return
+    }
+    const res = await fetch(
+      `/api/workspaces/${encodeURIComponent(workspaceId)}/columns`,
+    )
+    if (!res.ok) {
+      setErrorMessage('Failed to load kanban columns')
+      return
+    }
+    const data: KanbanColumn[] = await res.json()
+    setColumns(data)
+  }
+
   // First load: pull workspaces, default to the first one if nothing selected.
   useEffect(() => {
     let cancelled = false
@@ -85,7 +110,7 @@ export function AppShell() {
       if (initial && initial !== selectedWorkspaceId) {
         setSelectedWorkspaceId(initial)
       } else if (initial) {
-        await loadJobs(initial)
+        await Promise.all([loadJobs(initial), loadColumns(initial)])
       }
       setLoading(false)
     })()
@@ -96,8 +121,12 @@ export function AppShell() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // Workspace change: load both jobs and columns.
   useEffect(() => {
-    if (selectedWorkspaceId) void loadJobs(selectedWorkspaceId)
+    if (selectedWorkspaceId) {
+      void loadJobs(selectedWorkspaceId)
+      void loadColumns(selectedWorkspaceId)
+    }
   }, [selectedWorkspaceId])
 
   // If the currently selected job gets deleted (or its workspace
@@ -181,7 +210,7 @@ export function AppShell() {
   }
 
   // ---------- job mutations driven from kanban drag-drop ----------
-  async function moveJob(jobId: string, newStage: JobStage) {
+  async function moveJob(jobId: string, newStage: string) {
     // Optimistic update — flip the stage locally first so the card
     // doesn't snap back during the network round-trip. If the PATCH
     // fails we revert and surface an error.
@@ -459,6 +488,13 @@ export function AppShell() {
             setWorkspaces((prev) => [...prev, created])
             setSelectedWorkspaceId(created.id)
           }}
+          onColumnsChanged={() => {
+            // Round 7.2b: the workspace edit dialog's "Kanban columns"
+            // tab fired a change. Refetch the columns for the selected
+            // workspace so the kanban / filters / list view all reflect
+            // the new state immediately.
+            if (selectedWorkspaceId) void loadColumns(selectedWorkspaceId)
+          }}
         />
 
         {/* Row 1, Col 2 — header + widgets + filters. Determines the
@@ -544,6 +580,7 @@ export function AppShell() {
             setFilter={setFilterFromBar}
             sort={sort}
             setSort={setSortFromBar}
+            columns={columns}
           />
         </div>
 
@@ -564,6 +601,7 @@ export function AppShell() {
           {view === 'kanban' ? (
             <KanbanBoard
               jobs={visibleJobs}
+              columns={columns}
               onSelectJob={setSelectedJob}
               onMoveJob={moveJob}
             />
@@ -571,6 +609,7 @@ export function AppShell() {
             <JobListView
               jobs={visibleJobs}
               workspaces={workspaces}
+              columns={columns}
               onSelectJob={setSelectedJob}
             />
           )}
@@ -579,6 +618,7 @@ export function AppShell() {
 
       <JobDetailPanel
         job={selectedJob}
+        columns={columns}
         onClose={() => setSelectedJob(null)}
         onSaved={(updated) => {
           // Replace the job in local state with the server's canonical

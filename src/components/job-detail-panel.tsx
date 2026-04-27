@@ -1,18 +1,17 @@
 "use client"
 
 import { useEffect, useState } from 'react'
-import type { Job, JobStage, ApprovalStatus, AssetLink, CustomField } from '@/lib/types'
+import type { Job, KanbanColumn, ApprovalStatus, AssetLink, CustomField } from '@/lib/types'
 import { useUsers } from '@/lib/use-users'
 import { AssetLinksEditor } from './asset-links-editor'
 import { CustomFieldsEditor } from './custom-fields-editor'
 import { CampaignField } from './campaign-field'
 
-const STAGES: JobStage[] = ['brief', 'production', 'ready', 'posted', 'archive']
 const APPROVALS: { value: ApprovalStatus; label: string; tone: string }[] = [
-  { value: 'none', label: 'No approval needed', tone: 'text-[hsl(var(--muted-foreground))]' },
-  { value: 'awaiting', label: 'Awaiting approval', tone: 'text-amber-300' },
-  { value: 'approved', label: 'Approved', tone: 'text-emerald-300' },
-  { value: 'changes_requested', label: 'Changes requested', tone: 'text-red-300' },
+  { value: 'none', label: 'No approval needed', tone: 'text-slate-600' },
+  { value: 'awaiting', label: 'Awaiting approval', tone: 'text-amber-700' },
+  { value: 'approved', label: 'Approved', tone: 'text-emerald-700' },
+  { value: 'changes_requested', label: 'Changes requested', tone: 'text-red-700' },
 ]
 
 /** Fields the user can edit through this panel. Sent verbatim as the
@@ -55,11 +54,18 @@ function formatStamp(stamp: string | null): string {
 
 export function JobDetailPanel({
   job,
+  columns,
   onClose,
   onSaved,
   onDeleted,
 }: {
   job: Job | null
+  /** Per-workspace columns. The stage dropdown lists these. The
+   *  same prop is used to look up the user-facing column label
+   *  for the "Move the job to {label} to enable metric fetching"
+   *  helper text. Falls back to internal stage_keys if the active
+   *  job's workspace columns aren't available. */
+  columns: KanbanColumn[]
   onClose: () => void
   onSaved: (updated: Job) => void
   onDeleted: () => void
@@ -200,12 +206,12 @@ export function JobDetailPanel({
   }
 
   return (
-    <div className="fixed inset-y-0 right-0 w-full max-w-2xl bg-[hsl(var(--card))] border-l border-[hsl(var(--border))] overflow-y-auto z-40 shadow-2xl flex flex-col">
-      <div className="flex items-start justify-between gap-4 px-6 py-5 border-b border-[hsl(var(--border))] sticky top-0 bg-[hsl(var(--card))] z-10">
+    <div className="fixed inset-y-0 right-0 w-full max-w-2xl bg-white border-l border-slate-300 overflow-y-auto z-40 shadow-2xl flex flex-col">
+      <div className="flex items-start justify-between gap-4 px-6 py-5 border-b border-slate-300 sticky top-0 bg-white z-10">
         <div>
-          <p className="text-xs uppercase tracking-[0.25em] text-[hsl(var(--muted-foreground))]">Job detail</p>
+          <p className="text-xs uppercase tracking-[0.25em] text-slate-600">Job detail</p>
           <h2 className="text-2xl font-bold mt-1 line-clamp-2">{job.title}</h2>
-          <p className="text-xs text-[hsl(var(--muted-foreground))] mt-2">
+          <p className="text-xs text-slate-600 mt-2">
             Created {formatStamp(job.createdAt)} · Updated {formatStamp(job.updatedAt)}
           </p>
         </div>
@@ -215,7 +221,7 @@ export function JobDetailPanel({
       </div>
 
       {error && (
-        <div className="mx-6 mt-4 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200">
+        <div className="mx-6 mt-4 rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700">
           {error}
         </div>
       )}
@@ -223,10 +229,10 @@ export function JobDetailPanel({
       <div className="flex-1 px-6 py-5 space-y-6">
         {/* Section: core */}
         <section className="space-y-4">
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-[hsl(var(--muted-foreground))]">Overview</h3>
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-600">Overview</h3>
 
           <div>
-            <label className="text-xs text-[hsl(var(--muted-foreground))]">Title</label>
+            <label className="text-xs text-slate-600">Title</label>
             <input
               className="mt-1 w-full rounded-lg border bg-transparent px-3 py-2 text-sm"
               value={form.title}
@@ -235,7 +241,7 @@ export function JobDetailPanel({
           </div>
 
           <div>
-            <label className="text-xs text-[hsl(var(--muted-foreground))]">Description</label>
+            <label className="text-xs text-slate-600">Description</label>
             <textarea
               className="mt-1 w-full rounded-lg border bg-transparent px-3 py-2 text-sm min-h-24"
               value={form.description ?? ''}
@@ -245,32 +251,41 @@ export function JobDetailPanel({
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-xs text-[hsl(var(--muted-foreground))]">Stage</label>
+              <label className="text-xs text-slate-600">Stage</label>
               <select
-                className="mt-1 w-full rounded-lg border bg-transparent px-3 py-2 text-sm"
+                className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
                 value={form.stage}
-                onChange={(e) => patch('stage', e.target.value as JobStage)}
+                onChange={(e) => patch('stage', e.target.value)}
               >
-                {STAGES.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
+                {/* Round 7.2b: dropdown is now driven by the workspace's
+                    columns config. If the job is sitting in a stage that
+                    no longer exists in columns (rare — only happens if
+                    a teammate just deleted a custom column), still show
+                    the current value as a fallback option so the form
+                    isn't immediately invalid. */}
+                {!columns.some((c) => c.stageKey === form.stage) && form.stage && (
+                  <option value={form.stage}>{form.stage} (unknown)</option>
+                )}
+                {columns.map((c) => (
+                  <option key={c.id} value={c.stageKey}>
+                    {c.label}
                   </option>
                 ))}
               </select>
             </div>
             <div>
-              <label className="text-xs text-[hsl(var(--muted-foreground))]">Priority</label>
+              <label className="text-xs text-slate-600">Priority</label>
               <input
                 type="number"
                 min={0}
                 max={5}
-                className="mt-1 w-full rounded-lg border bg-transparent px-3 py-2 text-sm"
+                className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
                 value={form.priority}
                 onChange={(e) => patch('priority', Math.max(0, Math.min(5, Number(e.target.value) || 0)))}
               />
             </div>
             <div>
-              <label className="text-xs text-[hsl(var(--muted-foreground))]">Platform</label>
+              <label className="text-xs text-slate-600">Platform</label>
               <input
                 className="mt-1 w-full rounded-lg border bg-transparent px-3 py-2 text-sm"
                 value={form.platform ?? ''}
@@ -279,7 +294,7 @@ export function JobDetailPanel({
               />
             </div>
             <div>
-              <label className="text-xs text-[hsl(var(--muted-foreground))]">Content type</label>
+              <label className="text-xs text-slate-600">Content type</label>
               <input
                 className="mt-1 w-full rounded-lg border bg-transparent px-3 py-2 text-sm"
                 value={form.contentType ?? ''}
@@ -288,7 +303,7 @@ export function JobDetailPanel({
               />
             </div>
             <div>
-              <label className="text-xs text-[hsl(var(--muted-foreground))]">Due date</label>
+              <label className="text-xs text-slate-600">Due date</label>
               <input
                 type="date"
                 className="mt-1 w-full rounded-lg border bg-transparent px-3 py-2 text-sm"
@@ -297,7 +312,7 @@ export function JobDetailPanel({
               />
             </div>
             <div>
-              <label className="text-xs text-[hsl(var(--muted-foreground))]">Assigned to</label>
+              <label className="text-xs text-slate-600">Assigned to</label>
               <select
                 className="mt-1 w-full rounded-lg border bg-transparent px-3 py-2 text-sm"
                 value={form.assignedTo ?? ''}
@@ -314,7 +329,7 @@ export function JobDetailPanel({
           </div>
 
           <div>
-            <label className="text-xs text-[hsl(var(--muted-foreground))]">Hashtags</label>
+            <label className="text-xs text-slate-600">Hashtags</label>
             <input
               className="mt-1 w-full rounded-lg border bg-transparent px-3 py-2 text-sm"
               value={form.hashtags ?? ''}
@@ -326,9 +341,9 @@ export function JobDetailPanel({
 
         {/* Section: workflow / approvals */}
         <section className="space-y-3">
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-[hsl(var(--muted-foreground))]">Workflow</h3>
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-600">Workflow</h3>
           <div>
-            <label className="text-xs text-[hsl(var(--muted-foreground))]">Approval status</label>
+            <label className="text-xs text-slate-600">Approval status</label>
             <select
               className="mt-1 w-full rounded-lg border bg-transparent px-3 py-2 text-sm"
               value={form.approvalStatus}
@@ -345,10 +360,10 @@ export function JobDetailPanel({
 
         {/* Section: brief + assets */}
         <section className="space-y-3">
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-[hsl(var(--muted-foreground))]">Brief & assets</h3>
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-600">Brief & assets</h3>
 
           <div>
-            <label className="text-xs text-[hsl(var(--muted-foreground))]">Brief URL</label>
+            <label className="text-xs text-slate-600">Brief URL</label>
             <input
               className="mt-1 w-full rounded-lg border bg-transparent px-3 py-2 text-sm"
               value={form.briefUrl ?? ''}
@@ -360,7 +375,7 @@ export function JobDetailPanel({
                 href={form.briefUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-xs text-[hsl(var(--primary))] hover:underline mt-1 inline-block"
+                className="text-xs text-indigo-700 hover:underline mt-1 inline-block"
               >
                 Open brief ↗
               </a>
@@ -368,20 +383,20 @@ export function JobDetailPanel({
           </div>
 
           <div>
-            <label className="text-xs text-[hsl(var(--muted-foreground))]">Campaign</label>
+            <label className="text-xs text-slate-600">Campaign</label>
             <CampaignField
               value={form.campaign}
               workspaceId={form.workspaceId}
               onChange={(next) => patch('campaign', next)}
             />
-            <p className="text-[11px] text-[hsl(var(--muted-foreground))] mt-1">
+            <p className="text-[11px] text-slate-600 mt-1">
               Group related posts under a shared campaign name. Used by the
               Campaign report (coming in Round 6.2) to compare performance.
             </p>
           </div>
 
           <div>
-            <label className="text-xs text-[hsl(var(--muted-foreground))] block mb-2">Asset links</label>
+            <label className="text-xs text-slate-600 block mb-2">Asset links</label>
             <AssetLinksEditor
               links={form.assetLinks}
               onChange={(next: AssetLink[]) => patch('assetLinks', next)}
@@ -391,10 +406,10 @@ export function JobDetailPanel({
 
         {/* Section: live URLs (used by metrics fetching in later rounds) */}
         <section className="space-y-3">
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-[hsl(var(--muted-foreground))]">Live posts</h3>
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-600">Live posts</h3>
 
           <div>
-            <label className="text-xs text-[hsl(var(--muted-foreground))]">Generic live URL</label>
+            <label className="text-xs text-slate-600">Generic live URL</label>
             <input
               className="mt-1 w-full rounded-lg border bg-transparent px-3 py-2 text-sm"
               value={form.liveUrl ?? ''}
@@ -405,7 +420,7 @@ export function JobDetailPanel({
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-xs text-[hsl(var(--muted-foreground))]">Instagram URL</label>
+              <label className="text-xs text-slate-600">Instagram URL</label>
               <input
                 className="mt-1 w-full rounded-lg border bg-transparent px-3 py-2 text-sm"
                 value={form.instagramLiveUrl ?? ''}
@@ -414,7 +429,7 @@ export function JobDetailPanel({
               />
             </div>
             <div>
-              <label className="text-xs text-[hsl(var(--muted-foreground))]">Facebook URL</label>
+              <label className="text-xs text-slate-600">Facebook URL</label>
               <input
                 className="mt-1 w-full rounded-lg border bg-transparent px-3 py-2 text-sm"
                 value={form.facebookLiveUrl ?? ''}
@@ -426,69 +441,80 @@ export function JobDetailPanel({
         </section>
 
         {/* Section: live metrics — only meaningful for posted jobs with a URL.
-            Pulls from Apify on demand; requires the apify.token setting. */}
-        <section className="space-y-3">
-          <div className="flex items-center justify-between gap-3 flex-wrap">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-[hsl(var(--muted-foreground))]">
-              Live metrics
-            </h3>
-            <button
-              type="button"
-              onClick={fetchMetrics}
-              disabled={
-                metricsBusy ||
-                form.stage !== 'posted' ||
-                !(form.facebookLiveUrl || form.instagramLiveUrl || form.liveUrl)
-              }
-              className="rounded-lg bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] font-semibold px-3 py-1.5 text-xs disabled:opacity-50"
-              title={
-                form.stage !== 'posted'
-                  ? 'Move the job to Posted to enable metric fetching'
-                  : !(form.facebookLiveUrl || form.instagramLiveUrl || form.liveUrl)
-                  ? 'Add a Facebook or Instagram URL above first'
-                  : 'Fetch metrics from Apify'
-              }
-            >
-              {metricsBusy ? 'Fetching…' : 'Fetch metrics'}
-            </button>
-          </div>
-
-          {metricsError && (
-            <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-200">
-              {metricsError}
-            </div>
-          )}
-
-          {form.liveMetrics ? (
-            <div>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                <MetricTile label="Views" value={form.liveMetrics.views} />
-                <MetricTile label="Likes" value={form.liveMetrics.likes} />
-                <MetricTile label="Comments" value={form.liveMetrics.comments} />
-                <MetricTile label="Shares" value={form.liveMetrics.shares} />
+            Pulls from Apify on demand; requires the apify.token setting.
+            
+            Round 7.2b: the literal `'posted'` stage_key is unchanged
+            (it's the immutable internal key the metric-fetch logic
+            depends on), but the user-facing label is whatever the
+            workspace's `posted` column has been renamed to. */}
+        {(() => {
+          const postedColumn = columns.find((c) => c.stageKey === 'posted')
+          const postedLabel = postedColumn?.label ?? 'Posted'
+          return (
+            <section className="space-y-3">
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-600">
+                  Live metrics
+                </h3>
+                <button
+                  type="button"
+                  onClick={fetchMetrics}
+                  disabled={
+                    metricsBusy ||
+                    form.stage !== 'posted' ||
+                    !(form.facebookLiveUrl || form.instagramLiveUrl || form.liveUrl)
+                  }
+                  className="rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-3 py-1.5 text-xs disabled:opacity-50 disabled:cursor-not-allowed"
+                  title={
+                    form.stage !== 'posted'
+                      ? `Move the job to ${postedLabel} to enable metric fetching`
+                      : !(form.facebookLiveUrl || form.instagramLiveUrl || form.liveUrl)
+                      ? 'Add a Facebook or Instagram URL above first'
+                      : 'Fetch metrics from Apify'
+                  }
+                >
+                  {metricsBusy ? 'Fetching…' : 'Fetch metrics'}
+                </button>
               </div>
-              {/* Engagement rate gets its own tile so it stays visible
-                  and harder to drop in future edits. Renders even when
-                  null (shows "—") so the slot is always there. */}
-              <div className="mt-2">
-                <EngagementRateTile rate={form.liveMetrics.engagementRate} />
-              </div>
-              <p className="text-[11px] text-[hsl(var(--muted-foreground))] mt-2">
-                Last fetched: {formatStamp(form.lastMetricsFetchAt)}
-              </p>
-            </div>
-          ) : (
-            <p className="text-xs text-[hsl(var(--muted-foreground))]">
-              {form.stage === 'posted'
-                ? 'No metrics fetched yet. Click "Fetch metrics" once a Facebook or Instagram URL is set.'
-                : 'Metrics become available once the job is moved to Posted and a public URL is added.'}
-            </p>
-          )}
-        </section>
+
+              {metricsError && (
+                <div className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-700">
+                  {metricsError}
+                </div>
+              )}
+
+              {form.liveMetrics ? (
+                <div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    <MetricTile label="Views" value={form.liveMetrics.views} />
+                    <MetricTile label="Likes" value={form.liveMetrics.likes} />
+                    <MetricTile label="Comments" value={form.liveMetrics.comments} />
+                    <MetricTile label="Shares" value={form.liveMetrics.shares} />
+                  </div>
+                  {/* Engagement rate gets its own tile so it stays visible
+                      and harder to drop in future edits. Renders even when
+                      null (shows "—") so the slot is always there. */}
+                  <div className="mt-2">
+                    <EngagementRateTile rate={form.liveMetrics.engagementRate} />
+                  </div>
+                  <p className="text-[11px] text-slate-500 mt-2">
+                    Last fetched: {formatStamp(form.lastMetricsFetchAt)}
+                  </p>
+                </div>
+              ) : (
+                <p className="text-xs text-slate-600">
+                  {form.stage === 'posted'
+                    ? 'No metrics fetched yet. Click "Fetch metrics" once a Facebook or Instagram URL is set.'
+                    : `Metrics become available once the job is moved to ${postedLabel} and a public URL is added.`}
+                </p>
+              )}
+            </section>
+          )
+        })()}
 
         {/* Section: custom fields */}
         <section>
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-[hsl(var(--muted-foreground))] mb-2">Custom fields</h3>
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-600 mb-2">Custom fields</h3>
           <CustomFieldsEditor
             fields={form.customFields}
             onChange={(next: CustomField[]) => patch('customFields', next)}
@@ -497,7 +523,7 @@ export function JobDetailPanel({
 
         {/* Section: notes */}
         <section>
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-[hsl(var(--muted-foreground))] mb-2">Notes</h3>
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-600 mb-2">Notes</h3>
           <textarea
             className="w-full rounded-lg border bg-transparent px-3 py-2 text-sm min-h-32"
             value={form.notes ?? ''}
@@ -507,16 +533,16 @@ export function JobDetailPanel({
         </section>
       </div>
 
-      <div className="px-6 py-4 border-t border-[hsl(var(--border))] sticky bottom-0 bg-[hsl(var(--card))] flex items-center justify-between gap-3">
+      <div className="px-6 py-4 border-t border-slate-300 sticky bottom-0 bg-white flex items-center justify-between gap-3">
         <button
-          className="rounded-lg border px-4 py-2 text-sm text-red-400 hover:bg-red-500/10"
+          className="rounded-lg border px-4 py-2 text-sm text-red-700 border-red-300 hover:bg-red-50"
           onClick={remove}
           disabled={saving}
         >
           Delete job
         </button>
         <div className="flex items-center gap-2">
-          {dirty && <span className="text-xs text-[hsl(var(--muted-foreground))]">Unsaved changes</span>}
+          {dirty && <span className="text-xs text-slate-600">Unsaved changes</span>}
           <button
             className="rounded-lg border px-4 py-2 text-sm"
             onClick={attemptClose}
@@ -525,7 +551,7 @@ export function JobDetailPanel({
             Close
           </button>
           <button
-            className="rounded-lg bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] font-semibold px-4 py-2 text-sm disabled:opacity-60"
+            className="rounded-lg bg-indigo-600 text-white font-semibold px-4 py-2 text-sm disabled:opacity-60"
             onClick={save}
             disabled={saving || !dirty}
           >
@@ -542,8 +568,8 @@ export function JobDetailPanel({
  * stories and shouldn't look the same. */
 function MetricTile({ label, value }: { label: string; value: number | null }) {
   return (
-    <div className="rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--background))] p-2">
-      <p className="text-[10px] uppercase tracking-wider text-[hsl(var(--muted-foreground))]">
+    <div className="rounded-lg border border-slate-300 bg-white p-2">
+      <p className="text-[10px] uppercase tracking-wider text-slate-600">
         {label}
       </p>
       <p className="text-base font-semibold mt-0.5">
@@ -558,11 +584,11 @@ function MetricTile({ label, value }: { label: string; value: number | null }) {
  * to two decimals. Null renders "—" so the slot is always present. */
 function EngagementRateTile({ rate }: { rate: number | null }) {
   return (
-    <div className="rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--primary))]/5 p-2.5 flex items-center justify-between">
-      <p className="text-[11px] uppercase tracking-wider text-[hsl(var(--muted-foreground))]">
+    <div className="rounded-lg border border-slate-300 bg-indigo-600/5 p-2.5 flex items-center justify-between">
+      <p className="text-[11px] uppercase tracking-wider text-slate-600">
         Engagement rate
       </p>
-      <p className="text-base font-semibold text-[hsl(var(--foreground))]">
+      <p className="text-base font-semibold text-slate-900">
         {rate == null ? '—' : (rate * 100).toFixed(2) + '%'}
       </p>
     </div>

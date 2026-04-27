@@ -2,23 +2,41 @@
 
 import { useEffect, useState } from 'react'
 import type { Workspace } from '@/lib/types'
+import { KanbanColumnsEditor } from '@/components/kanban-columns-editor'
 
 /**
- * Workspace edit dialog — Round 7.1.2.
+ * Workspace edit dialog — Round 7.2b.
  *
- * Hardcoded slate colours (no CSS variables) so the dialog cannot
- * render with invisible text regardless of theme state. Same treatment
- * as workspace-create-dialog.
+ * Round 7.1.2 hardcoded slate colours so the dialog can never render
+ * with invisible text regardless of theme state.
+ *
+ * Round 7.2b adds a "Kanban columns" tab alongside the existing
+ * "General" tab, hosting the per-workspace column configuration
+ * editor (rename, recolor, reorder, add custom, delete custom).
+ *
+ * The dialog widens to max-w-2xl to give the columns editor room for
+ * drag handles + colour swatch + label input + delete button per row
+ * without feeling cramped.
  */
+type Tab = 'general' | 'columns'
+
 export function WorkspaceEditDialog({
   workspace,
   onClose,
   onSaved,
+  onColumnsChanged,
 }: {
   workspace: Workspace
   onClose: () => void
   onSaved: (updated: Workspace) => void
+  /** Fired when a column is added/renamed/recoloured/reordered/deleted.
+   *  Lets the parent (app-shell) refresh its column-driven views
+   *  without needing to wait for the dialog to close. Optional —
+   *  when omitted, the dialog still works but the kanban won't
+   *  reflect column changes until the user navigates. */
+  onColumnsChanged?: () => void
 }) {
+  const [tab, setTab] = useState<Tab>('general')
   const [name, setName] = useState(workspace.name)
   const [color, setColor] = useState(workspace.color)
   const [facebookPageUrl, setFacebookPageUrl] = useState(
@@ -36,6 +54,7 @@ export function WorkspaceEditDialog({
     setFacebookPageUrl(workspace.facebookPageUrl ?? '')
     setInstagramPageUrl(workspace.instagramPageUrl ?? '')
     setError(null)
+    setTab('general')
   }, [workspace.id, workspace.name, workspace.color, workspace.facebookPageUrl, workspace.instagramPageUrl])
 
   async function handleSave() {
@@ -89,116 +108,176 @@ export function WorkspaceEditDialog({
       onClick={() => !saving && onClose()}
     >
       <div
-        className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white shadow-xl"
+        className="w-full max-w-2xl rounded-2xl border border-slate-200 bg-white shadow-xl flex flex-col max-h-[90vh]"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="px-6 py-4 border-b border-slate-200">
           <h2 className="text-lg font-semibold text-slate-900">Workspace settings</h2>
           <p className="text-xs text-slate-600 mt-0.5 leading-relaxed">
-            Configure the workspace and the page URLs the metric fetcher uses.
+            Configure the workspace, page URLs, and kanban columns.
           </p>
         </div>
 
-        <div className="px-6 py-5 space-y-5">
-          <label className="block">
-            <span className="text-xs uppercase tracking-wider font-semibold text-slate-700">
-              Name
-            </span>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              maxLength={120}
-              className={inputClass}
-              placeholder="Brand or workspace name"
+        {/* Tab strip */}
+        <div className="px-6 pt-3 border-b border-slate-200 flex items-center gap-1">
+          <TabButton active={tab === 'general'} onClick={() => setTab('general')}>
+            General
+          </TabButton>
+          <TabButton active={tab === 'columns'} onClick={() => setTab('columns')}>
+            Kanban columns
+          </TabButton>
+        </div>
+
+        <div className="px-6 py-5 space-y-5 overflow-y-auto flex-1">
+          {tab === 'general' && (
+            <>
+              <label className="block">
+                <span className="text-xs uppercase tracking-wider font-semibold text-slate-700">
+                  Name
+                </span>
+                <input
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  maxLength={120}
+                  className={inputClass}
+                  placeholder="Brand or workspace name"
+                />
+              </label>
+
+              <label className="block">
+                <span className="text-xs uppercase tracking-wider font-semibold text-slate-700">
+                  Color
+                </span>
+                <div className="mt-1 flex items-center gap-3">
+                  <input
+                    type="color"
+                    value={color}
+                    onChange={(e) => setColor(e.target.value)}
+                    className="h-10 w-16 rounded border border-slate-300 bg-white cursor-pointer"
+                    aria-label="Workspace color"
+                  />
+                  <span className="text-xs text-slate-600 font-mono">
+                    {color}
+                  </span>
+                </div>
+              </label>
+
+              <label className="block">
+                <span className="text-xs uppercase tracking-wider font-semibold text-slate-700">
+                  Facebook page URL
+                </span>
+                <input
+                  type="url"
+                  value={facebookPageUrl}
+                  onChange={(e) => setFacebookPageUrl(e.target.value)}
+                  className={inputClass}
+                  placeholder="https://www.facebook.com/yourbrandpage"
+                />
+                <p className="text-[11px] text-slate-600 mt-1.5 leading-relaxed">
+                  Required for Facebook metric fetching. The fetcher scrapes
+                  this page and locates the post you&apos;re fetching among
+                  its 50 most recent posts. Without it, direct-URL fetches
+                  fail because Apify&apos;s Facebook actor only reliably
+                  accepts page URLs as input.
+                </p>
+              </label>
+
+              <label className="block">
+                <span className="text-xs uppercase tracking-wider font-semibold text-slate-700">
+                  Instagram page URL{' '}
+                  <span className="text-[10px] normal-case tracking-normal text-slate-500">
+                    (optional)
+                  </span>
+                </span>
+                <input
+                  type="url"
+                  value={instagramPageUrl}
+                  onChange={(e) => setInstagramPageUrl(e.target.value)}
+                  className={inputClass}
+                  placeholder="https://www.instagram.com/yourbrandhandle"
+                />
+                <p className="text-[11px] text-slate-600 mt-1.5 leading-relaxed">
+                  Reserved for future use. Instagram metric fetching works
+                  per-post and doesn&apos;t need this; we save it for batch
+                  flows we may add later.
+                </p>
+              </label>
+
+              {error && (
+                <div className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700">
+                  {error}
+                </div>
+              )}
+            </>
+          )}
+
+          {tab === 'columns' && (
+            <KanbanColumnsEditor
+              workspaceId={workspace.id}
+              onColumnsChanged={() => onColumnsChanged?.()}
             />
-          </label>
-
-          <label className="block">
-            <span className="text-xs uppercase tracking-wider font-semibold text-slate-700">
-              Color
-            </span>
-            <div className="mt-1 flex items-center gap-3">
-              <input
-                type="color"
-                value={color}
-                onChange={(e) => setColor(e.target.value)}
-                className="h-10 w-16 rounded border border-slate-300 bg-white cursor-pointer"
-                aria-label="Workspace color"
-              />
-              <span className="text-xs text-slate-600 font-mono">
-                {color}
-              </span>
-            </div>
-          </label>
-
-          <label className="block">
-            <span className="text-xs uppercase tracking-wider font-semibold text-slate-700">
-              Facebook page URL
-            </span>
-            <input
-              type="url"
-              value={facebookPageUrl}
-              onChange={(e) => setFacebookPageUrl(e.target.value)}
-              className={inputClass}
-              placeholder="https://www.facebook.com/yourbrandpage"
-            />
-            <p className="text-[11px] text-slate-600 mt-1.5 leading-relaxed">
-              Required for Facebook metric fetching. The fetcher scrapes
-              this page and locates the post you&apos;re fetching among
-              its 50 most recent posts. Without it, direct-URL fetches
-              fail because Apify&apos;s Facebook actor only reliably
-              accepts page URLs as input.
-            </p>
-          </label>
-
-          <label className="block">
-            <span className="text-xs uppercase tracking-wider font-semibold text-slate-700">
-              Instagram page URL{' '}
-              <span className="text-[10px] normal-case tracking-normal text-slate-500">
-                (optional)
-              </span>
-            </span>
-            <input
-              type="url"
-              value={instagramPageUrl}
-              onChange={(e) => setInstagramPageUrl(e.target.value)}
-              className={inputClass}
-              placeholder="https://www.instagram.com/yourbrandhandle"
-            />
-            <p className="text-[11px] text-slate-600 mt-1.5 leading-relaxed">
-              Reserved for future use. Instagram metric fetching works
-              per-post and doesn&apos;t need this; we save it for batch
-              flows we may add later.
-            </p>
-          </label>
-
-          {error && (
-            <div className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700">
-              {error}
-            </div>
           )}
         </div>
 
         <div className="px-6 py-4 border-t border-slate-200 flex items-center justify-end gap-2">
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={saving}
-            className="rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 px-4 py-2 text-sm disabled:opacity-50"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={saving || !name.trim()}
-            className="rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-4 py-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {saving ? 'Saving…' : 'Save'}
-          </button>
+          {tab === 'general' ? (
+            <>
+              <button
+                type="button"
+                onClick={onClose}
+                disabled={saving}
+                className="rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 px-4 py-2 text-sm disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSave}
+                disabled={saving || !name.trim()}
+                className="rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-4 py-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {saving ? 'Saving…' : 'Save'}
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 px-4 py-2 text-sm"
+            >
+              Done
+            </button>
+          )}
         </div>
       </div>
     </div>
+  )
+}
+
+function TabButton({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean
+  onClick: () => void
+  children: React.ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`relative px-4 py-2 text-sm font-medium transition-colors ${
+        active
+          ? 'text-indigo-700'
+          : 'text-slate-600 hover:text-slate-900'
+      }`}
+    >
+      {children}
+      {active && (
+        <span className="absolute left-0 right-0 -bottom-px h-0.5 bg-indigo-600 rounded-t" />
+      )}
+    </button>
   )
 }

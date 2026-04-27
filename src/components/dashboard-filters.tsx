@@ -2,15 +2,7 @@
 
 import type { JobFilterState, SortKey } from '@/lib/job-filters'
 import { DEFAULT_FILTER_STATE, hasActiveFilters } from '@/lib/job-filters'
-import type { ApprovalStatus, JobStage } from '@/lib/types'
-
-const STAGES: { id: JobStage; label: string }[] = [
-  { id: 'brief', label: 'Brief' },
-  { id: 'production', label: 'Production' },
-  { id: 'ready', label: 'Ready' },
-  { id: 'posted', label: 'Posted' },
-  { id: 'archive', label: 'Archive' },
-]
+import type { ApprovalStatus, KanbanColumn } from '@/lib/types'
 
 const PLATFORMS = ['instagram', 'facebook', 'tiktok', 'youtube']
 
@@ -31,16 +23,28 @@ const SORT_OPTIONS: { value: SortKey; label: string }[] = [
   { value: 'priorityAsc', label: 'Priority (lowest)' },
 ]
 
+/**
+ * Round 7.2b: stage dropdown is now driven by the columns prop, so
+ * custom user-added columns appear as filterable options alongside
+ * the built-ins. The values stored in JobFilterState.stage match the
+ * stage_key strings used in jobs.stage.
+ *
+ * Round 7.1.x: hardcoded slate colours so the filter bar reads
+ * correctly on the light theme regardless of CSS variable state.
+ */
 export function DashboardFilters({
   filter,
   setFilter,
   sort,
   setSort,
+  columns,
 }: {
   filter: JobFilterState
   setFilter: (next: JobFilterState) => void
   sort: SortKey
   setSort: (next: SortKey) => void
+  /** Per-workspace columns. The stage dropdown lists these in order. */
+  columns: KanbanColumn[]
 }) {
   const active = hasActiveFilters(filter)
 
@@ -48,29 +52,32 @@ export function DashboardFilters({
     setFilter({ ...filter, ...next })
   }
 
+  const inputClass =
+    'rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500'
+
   return (
-    <div className="rounded-2xl border bg-[hsl(var(--card))] p-4 space-y-3">
+    <div className="rounded-2xl border border-slate-200 bg-white surface-shadow p-4 space-y-3">
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
         <input
-          className="rounded-lg border bg-transparent px-3 py-2 text-sm"
+          className={inputClass}
           placeholder="Search title / description / hashtags..."
           value={filter.keyword}
           onChange={(e) => patch({ keyword: e.target.value })}
         />
         <select
-          className="rounded-lg border bg-transparent px-3 py-2 text-sm"
+          className={inputClass}
           value={filter.stage}
-          onChange={(e) => patch({ stage: (e.target.value || '') as JobFilterState['stage'] })}
+          onChange={(e) => patch({ stage: e.target.value })}
         >
           <option value="">All stages</option>
-          {STAGES.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.label}
+          {columns.map((c) => (
+            <option key={c.id} value={c.stageKey}>
+              {c.label}
             </option>
           ))}
         </select>
         <select
-          className="rounded-lg border bg-transparent px-3 py-2 text-sm"
+          className={inputClass}
           value={filter.platform}
           onChange={(e) => patch({ platform: e.target.value })}
         >
@@ -82,7 +89,7 @@ export function DashboardFilters({
           ))}
         </select>
         <select
-          className="rounded-lg border bg-transparent px-3 py-2 text-sm"
+          className={inputClass}
           value={sort}
           onChange={(e) => setSort(e.target.value as SortKey)}
         >
@@ -93,12 +100,11 @@ export function DashboardFilters({
           ))}
         </select>
       </div>
-
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3 items-end">
-        <label className="flex flex-col gap-1 text-xs text-[hsl(var(--muted-foreground))]">
+        <label className="flex flex-col gap-1 text-xs text-slate-600">
           Min priority
           <select
-            className="rounded-lg border bg-transparent px-3 py-2 text-sm"
+            className={inputClass}
             value={filter.priorityMin == null ? '' : String(filter.priorityMin)}
             onChange={(e) =>
               patch({ priorityMin: e.target.value === '' ? null : Number(e.target.value) })
@@ -112,11 +118,10 @@ export function DashboardFilters({
             ))}
           </select>
         </label>
-
-        <label className="flex flex-col gap-1 text-xs text-[hsl(var(--muted-foreground))]">
+        <label className="flex flex-col gap-1 text-xs text-slate-600">
           Approval
           <select
-            className="rounded-lg border bg-transparent px-3 py-2 text-sm"
+            className={inputClass}
             value={filter.approvalStatus}
             onChange={(e) =>
               patch({
@@ -132,29 +137,26 @@ export function DashboardFilters({
             ))}
           </select>
         </label>
-
-        <label className="flex flex-col gap-1 text-xs text-[hsl(var(--muted-foreground))]">
+        <label className="flex flex-col gap-1 text-xs text-slate-600">
           Due from
           <input
             type="date"
-            className="rounded-lg border bg-transparent px-3 py-2 text-sm"
+            className={inputClass}
             value={filter.dueFrom ?? ''}
             onChange={(e) => patch({ dueFrom: e.target.value || null })}
           />
         </label>
-
-        <label className="flex flex-col gap-1 text-xs text-[hsl(var(--muted-foreground))]">
+        <label className="flex flex-col gap-1 text-xs text-slate-600">
           Due to
           <input
             type="date"
-            className="rounded-lg border bg-transparent px-3 py-2 text-sm"
+            className={inputClass}
             value={filter.dueTo ?? ''}
             onChange={(e) => patch({ dueTo: e.target.value || null })}
           />
         </label>
-
         <div className="flex items-center justify-end gap-3">
-          <label className="flex items-center gap-2 text-xs text-[hsl(var(--muted-foreground))]">
+          <label className="flex items-center gap-2 text-xs text-slate-600">
             <input
               type="checkbox"
               checked={filter.hideArchived}
@@ -165,7 +167,7 @@ export function DashboardFilters({
           {active && (
             <button
               type="button"
-              className="text-xs text-[hsl(var(--primary))] hover:underline"
+              className="text-xs text-indigo-700 hover:underline"
               onClick={() => setFilter(DEFAULT_FILTER_STATE)}
             >
               Clear filters

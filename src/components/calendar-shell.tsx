@@ -6,7 +6,7 @@ import { HostedSidebar } from '@/components/hosted-sidebar'
 import { CalendarView } from '@/components/calendar-view'
 import { JobDetailPanel } from '@/components/job-detail-panel'
 import { JobCreateDialog } from '@/components/job-create-dialog'
-import type { Job, Workspace } from '@/lib/types'
+import type { Job, Workspace, KanbanColumn } from '@/lib/types'
 
 /**
  * Page shell for /calendar. Mirrors AppShell's structure but hosts the
@@ -33,6 +33,7 @@ export function CalendarShell() {
   const [createOpen, setCreateOpen] = useState(false)
   const [createDefaultDate, setCreateDefaultDate] = useState<string | null>(null)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [columns, setColumns] = useState<KanbanColumn[]>([])
 
   // ---------- data loading ----------
   async function loadWorkspaces(): Promise<Workspace[]> {
@@ -60,6 +61,14 @@ export function CalendarShell() {
     setJobs(data)
   }
 
+  async function loadColumns(workspaceId?: string) {
+    if (!workspaceId) return
+    const res = await fetch(`/api/workspaces/${encodeURIComponent(workspaceId)}/columns`)
+    if (!res.ok) return
+    const data = (await res.json()) as KanbanColumn[]
+    setColumns(data)
+  }
+
   useEffect(() => {
     let cancelled = false
     ;(async () => {
@@ -69,7 +78,10 @@ export function CalendarShell() {
       // this page (the calendar uses its own filter), but kept consistent
       // so the sidebar highlight makes sense if the user navigates back.
       const initial = ws[0]?.id ?? ''
-      if (initial) setSelectedWorkspaceId(initial)
+      if (initial) {
+        setSelectedWorkspaceId(initial)
+        await loadColumns(initial)
+      }
       await loadJobs()
     })()
     return () => {
@@ -257,6 +269,7 @@ export function CalendarShell() {
 
       <JobDetailPanel
         job={selectedJob}
+        columns={columns}
         onClose={() => setSelectedJob(null)}
         onSaved={(updated) => {
           setJobs((js) => js.map((j) => (j.id === updated.id ? updated : j)))

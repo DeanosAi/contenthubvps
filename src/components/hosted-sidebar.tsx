@@ -42,6 +42,7 @@ export function HostedSidebar({
   onReorderWorkspaces,
   onWorkspaceUpdated,
   onWorkspaceCreated,
+  onColumnsChanged,
 }: {
   workspaces: Workspace[]
   selectedWorkspaceId: string
@@ -66,6 +67,12 @@ export function HostedSidebar({
    * created workspace. Optional for backward compatibility — without
    * it, new workspaces won't appear in the parent's list until reload. */
   onWorkspaceCreated?: (created: Workspace) => void
+  /** Round 7.2b: called whenever the workspace edit dialog's
+   * "Kanban columns" tab makes a change (rename / recolor / reorder
+   * / add / delete). Lets the parent refetch the active workspace's
+   * columns so the kanban / filters / list view reflect the change
+   * without a full reload. */
+  onColumnsChanged?: () => void
 }) {
   // onCreateWorkspace is intentionally unused — kept in the prop list
   // for backward compatibility with callers that still pass it.
@@ -284,6 +291,7 @@ export function HostedSidebar({
               onWorkspaceUpdated?.(updated)
               setSettingsForId('')
             }}
+            onColumnsChanged={onColumnsChanged}
           />
         )
       })()}

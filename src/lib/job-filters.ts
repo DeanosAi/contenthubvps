@@ -4,7 +4,7 @@
 //
 // All inputs are immutable — these never mutate the input array.
 
-import type { ApprovalStatus, Job, JobStage } from './types'
+import type { ApprovalStatus, Job } from './types'
 
 export type SortKey =
   | 'newest'
@@ -17,7 +17,11 @@ export type SortKey =
 
 export interface JobFilterState {
   keyword: string
-  stage: JobStage | ''
+  /** Round 7.2b: widened from `JobStage | ''` to `string` so custom
+   *  per-workspace stage keys can be filter-selected from the
+   *  Dashboard's stage dropdown (which is now driven by the
+   *  workspace's KanbanColumn config rather than hardcoded). */
+  stage: string
   platform: string
   priorityMin: number | null
   dueFrom: string | null // ISO date string (yyyy-mm-dd or full ISO)
