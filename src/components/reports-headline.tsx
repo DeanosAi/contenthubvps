@@ -7,7 +7,15 @@ import { formatNumber, formatEngagementRate } from '@/lib/reports'
  * presentational — just formats the numbers from `HeadlineNumbers` and
  * lays them out. The "no data" hint when `jobsWithMetrics === 0` is
  * important: it tells the user the zeros they're seeing are pre-fetch,
- * not actual zero performance. */
+ * not actual zero performance.
+ *
+ * Round 7.3: hardcoded slate colours (was reading from CSS variables
+ * which mostly worked but left the big numbers without an explicit
+ * text colour, so they inherited from <body> and could read pale if
+ * any parent layout ever set a light foreground). Now the numbers
+ * are explicitly slate-900, captions slate-600, labels slate-500 —
+ * defence in depth against any future cascade changes.
+ */
 export function ReportsHeadline({ headline }: { headline: HeadlineNumbers }) {
   const noMetrics = headline.totalPosts > 0 && headline.jobsWithMetrics === 0
 
@@ -41,14 +49,14 @@ export function ReportsHeadline({ headline }: { headline: HeadlineNumbers }) {
       {tiles.map((t) => (
         <div
           key={t.label}
-          className="rounded-2xl border bg-[hsl(var(--card))] p-4"
+          className="rounded-2xl border border-slate-200 bg-white surface-shadow p-4"
         >
-          <p className="text-xs uppercase tracking-wider text-[hsl(var(--muted-foreground))]">
+          <p className="text-xs uppercase tracking-wider font-semibold text-slate-600">
             {t.label}
           </p>
-          <p className="mt-2 text-3xl font-bold">{t.value}</p>
+          <p className="mt-2 text-3xl font-bold text-slate-900">{t.value}</p>
           {t.caption && (
-            <p className="mt-1 text-[11px] text-[hsl(var(--muted-foreground))]">{t.caption}</p>
+            <p className="mt-1 text-[11px] text-slate-500">{t.caption}</p>
           )}
         </div>
       ))}

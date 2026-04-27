@@ -4,12 +4,16 @@ import type { PlatformRow } from '@/lib/reports'
 import { formatNumber, formatEngagementRate } from '@/lib/reports'
 
 /** Tabular breakdown of metrics per platform. Sorted by total engagement
- * desc (best-performing platforms at the top). */
+ * desc (best-performing platforms at the top).
+ *
+ * Round 7.3: dark-mode CSS-var references swept to hardcoded slate
+ * for consistency and defence in depth.
+ */
 export function ReportsPlatformTable({ rows }: { rows: PlatformRow[] }) {
   if (rows.length === 0) {
     return (
-      <div className="rounded-2xl border bg-[hsl(var(--card))] p-10 text-center">
-        <p className="text-sm text-[hsl(var(--muted-foreground))]">
+      <div className="rounded-2xl border border-slate-200 bg-white surface-shadow p-10 text-center">
+        <p className="text-sm text-slate-600">
           No posts in this range yet.
         </p>
       </div>
@@ -17,34 +21,34 @@ export function ReportsPlatformTable({ rows }: { rows: PlatformRow[] }) {
   }
 
   return (
-    <div className="rounded-2xl border bg-[hsl(var(--card))] overflow-x-auto">
+    <div className="rounded-2xl border border-slate-200 bg-white surface-shadow overflow-x-auto">
       <table className="w-full text-sm">
-        <thead className="text-xs uppercase tracking-wider text-[hsl(var(--muted-foreground))] border-b">
+        <thead className="text-xs uppercase tracking-wider text-slate-600 border-b border-slate-200 font-semibold">
           <tr>
-            <th className="text-left px-4 py-3 font-medium">Platform</th>
-            <th className="text-right px-4 py-3 font-medium">Posts</th>
-            <th className="text-right px-4 py-3 font-medium">Views</th>
-            <th className="text-right px-4 py-3 font-medium">Engagement</th>
-            <th className="text-right px-4 py-3 font-medium">Avg eng. rate</th>
+            <th className="text-left px-4 py-3">Platform</th>
+            <th className="text-right px-4 py-3">Posts</th>
+            <th className="text-right px-4 py-3">Views</th>
+            <th className="text-right px-4 py-3">Engagement</th>
+            <th className="text-right px-4 py-3">Avg eng. rate</th>
           </tr>
         </thead>
         <tbody>
           {rows.map((r) => (
             <tr
               key={r.platform}
-              className="border-b last:border-b-0 hover:bg-[hsl(var(--accent))]/30 transition-colors"
+              className="border-b border-slate-200 last:border-b-0 hover:bg-slate-50 transition-colors"
             >
-              <td className="px-4 py-3 font-medium capitalize">{r.platform}</td>
-              <td className="px-4 py-3 text-right text-[hsl(var(--muted-foreground))]">
+              <td className="px-4 py-3 font-medium capitalize text-slate-900">{r.platform}</td>
+              <td className="px-4 py-3 text-right text-slate-700">
                 {r.postsCount}
               </td>
-              <td className="px-4 py-3 text-right text-[hsl(var(--muted-foreground))]">
+              <td className="px-4 py-3 text-right text-slate-700">
                 {formatNumber(r.totalViews)}
               </td>
-              <td className="px-4 py-3 text-right text-[hsl(var(--muted-foreground))]">
+              <td className="px-4 py-3 text-right text-slate-700">
                 {formatNumber(r.totalEngagement)}
               </td>
-              <td className="px-4 py-3 text-right text-[hsl(var(--muted-foreground))]">
+              <td className="px-4 py-3 text-right text-slate-700">
                 {formatEngagementRate(r.avgEngagementRate)}
               </td>
             </tr>

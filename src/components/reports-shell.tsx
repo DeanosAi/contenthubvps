@@ -414,11 +414,11 @@ export function ReportsShell() {
         </section>
 
         {/* Report-specific filter bar — workspace + date range + PDF action */}
-        <section className="rounded-2xl border bg-[hsl(var(--card))] p-4 flex flex-wrap items-end gap-4">
-          <label className="flex flex-col gap-1 text-xs text-[hsl(var(--muted-foreground))]">
+        <section className="rounded-2xl border border-slate-200 bg-white surface-shadow p-4 flex flex-wrap items-end gap-4">
+          <label className="flex flex-col gap-1 text-xs text-slate-600">
             Workspace
             <select
-              className="rounded-lg border bg-transparent px-3 py-2 text-sm min-w-48"
+              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 min-w-48"
               value={reportWorkspaceId}
               onChange={(e) => setReportWorkspaceId(e.target.value)}
             >
@@ -430,20 +430,20 @@ export function ReportsShell() {
               ))}
             </select>
           </label>
-          <label className="flex flex-col gap-1 text-xs text-[hsl(var(--muted-foreground))]">
+          <label className="flex flex-col gap-1 text-xs text-slate-600">
             From
             <input
               type="date"
-              className="rounded-lg border bg-transparent px-3 py-2 text-sm"
+              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
               value={fromIso}
               onChange={(e) => setFromIso(e.target.value)}
             />
           </label>
-          <label className="flex flex-col gap-1 text-xs text-[hsl(var(--muted-foreground))]">
+          <label className="flex flex-col gap-1 text-xs text-slate-600">
             To
             <input
               type="date"
-              className="rounded-lg border bg-transparent px-3 py-2 text-sm"
+              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
               value={toIso}
               onChange={(e) => setToIso(e.target.value)}
             />
@@ -457,7 +457,7 @@ export function ReportsShell() {
                 setFromIso(r.fromIso)
                 setToIso(r.toIso)
               }}
-              className="rounded-lg border px-3 py-2 text-sm text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]"
+              className="rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 px-3 py-2 text-sm transition-colors"
             >
               Reset to last 30 days
             </button>
@@ -465,7 +465,7 @@ export function ReportsShell() {
               type="button"
               onClick={downloadPdf}
               disabled={pdfBusy || loading || !data}
-              className="rounded-lg bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] font-semibold px-4 py-2 text-sm disabled:opacity-50"
+              className="rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-4 py-2 text-sm disabled:opacity-50"
             >
               {pdfBusy ? 'Generating PDF…' : 'Download PDF'}
             </button>
@@ -473,7 +473,7 @@ export function ReportsShell() {
         </section>
 
         {loading && !data ? (
-          <div className="rounded-2xl border bg-[hsl(var(--card))] p-10 text-center text-sm text-[hsl(var(--muted-foreground))]">
+          <div className="rounded-2xl border border-slate-200 bg-white surface-shadow p-10 text-center text-sm text-slate-600">
             Loading report…
           </div>
         ) : reportType === 'campaign' ? (
@@ -519,7 +519,7 @@ export function ReportsShell() {
               <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-600">
                 Recommendations{' '}
                 {recommendations.length > 0 && (
-                  <span className="ml-1 text-[hsl(var(--muted-foreground))] font-normal normal-case tracking-normal">
+                  <span className="ml-1 text-slate-600 font-normal normal-case tracking-normal">
                     ({recommendations.length} triggered)
                   </span>
                 )}
@@ -528,7 +528,7 @@ export function ReportsShell() {
             </section>
           </>
         ) : (
-          <div className="rounded-2xl border bg-[hsl(var(--card))] p-10 text-center text-sm text-[hsl(var(--muted-foreground))]">
+          <div className="rounded-2xl border border-slate-200 bg-white surface-shadow p-10 text-center text-sm text-slate-600">
             Preparing deep-dive…
           </div>
         )}
