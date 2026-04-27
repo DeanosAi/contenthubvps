@@ -121,12 +121,29 @@ export function HostedSidebar({
 
   return (
     <aside className="rounded-2xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.06),0_4px_16px_rgba(15,23,42,0.08)] flex flex-col self-start overflow-hidden">
-      {/* Branding row */}
+      {/* Branding row.
+          Round 7.6: replaced the "Content Hub" h1 wordmark with a
+          PNG/JPEG logo file. The small indigo-square placeholder
+          to its left is preserved — that's reserved for an eventual
+          per-client logo (the user's own brand mark, when this
+          becomes a multi-tenant install where a workspace might
+          render a custom logo there). The dual-icon look is
+          intentional during this build phase. */}
       <div className="px-4 py-3.5 border-b border-slate-200 flex items-center gap-3">
         <div className="h-8 w-8 rounded-lg bg-indigo-100 flex items-center justify-center">
           <div className="h-4 w-4 rounded bg-indigo-600" />
         </div>
-        <h1 className="text-lg font-bold text-slate-900">Content Hub</h1>
+        {/* eslint-disable-next-line @next/next/no-img-element --
+            using plain <img> intentionally. The logo is a tiny static
+            asset (~16 KB), the optimisation Next/Image provides
+            (responsive variants, lazy loading, blur placeholder) is
+            unnecessary for a branding mark that's always above the
+            fold and never resizes. */}
+        <img
+          src="/content-hub-logo.jpg"
+          alt="Content Hub"
+          className="h-7 w-auto"
+        />
       </div>
 
       {/* Page navigation */}
