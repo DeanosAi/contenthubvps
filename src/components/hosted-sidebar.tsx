@@ -113,17 +113,17 @@ export function HostedSidebar({
   }
 
   return (
-    <aside className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] surface-shadow flex flex-col self-start overflow-hidden">
+    <aside className="rounded-2xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.06),0_4px_16px_rgba(15,23,42,0.08)] flex flex-col self-start overflow-hidden">
       {/* Branding row */}
-      <div className="px-4 py-3.5 border-b border-[hsl(var(--border))] flex items-center gap-3">
-        <div className="h-8 w-8 rounded-lg bg-[hsl(var(--primary))]/15 flex items-center justify-center">
-          <div className="h-4 w-4 rounded bg-[hsl(var(--primary))]" />
+      <div className="px-4 py-3.5 border-b border-slate-200 flex items-center gap-3">
+        <div className="h-8 w-8 rounded-lg bg-indigo-100 flex items-center justify-center">
+          <div className="h-4 w-4 rounded bg-indigo-600" />
         </div>
-        <h1 className="text-lg font-bold text-[hsl(var(--foreground))]">Content Hub</h1>
+        <h1 className="text-lg font-bold text-slate-900">Content Hub</h1>
       </div>
 
       {/* Page navigation */}
-      <div className="p-3 border-b border-[hsl(var(--border))]">
+      <div className="p-3 border-b border-slate-200">
         <nav className="space-y-0.5 text-sm">
           <SidebarLink href="/app" label="Dashboard" pathname={pathname} matchPrefix="/app" />
           <SidebarLink href="/calendar" label="Calendar" pathname={pathname} matchPrefix="/calendar" />
@@ -137,13 +137,13 @@ export function HostedSidebar({
         {/* Header with "Workspaces" + "+" button. Sticky-ish: stays
             anchored above the scrolling list. */}
         <div className="px-4 pt-3 pb-2 flex items-center justify-between">
-          <p className="text-xs font-semibold uppercase tracking-wider text-[hsl(var(--muted-foreground))]">
+          <p className="text-xs font-semibold uppercase tracking-wider text-slate-600">
             Workspaces
           </p>
           <button
             type="button"
             onClick={() => setCreateOpen(true)}
-            className="h-6 w-6 rounded-md flex items-center justify-center text-base font-semibold text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--accent))] hover:text-[hsl(var(--foreground))] transition-colors"
+            className="h-6 w-6 rounded-md flex items-center justify-center text-base font-semibold text-slate-500 hover:bg-indigo-50 hover:text-indigo-700 transition-colors"
             title="Create a new workspace"
             aria-label="New workspace"
           >
@@ -167,15 +167,15 @@ export function HostedSidebar({
                           {...prov.draggableProps}
                           className={`group rounded-md transition-colors ${
                             selectedWorkspaceId === workspace.id
-                              ? 'bg-[hsl(var(--accent))] text-[hsl(var(--accent-foreground))]'
-                              : 'hover:bg-[hsl(var(--accent))]/50'
-                          } ${snap.isDragging ? 'shadow-lg ring-1 ring-[hsl(var(--primary))]/60' : ''}`}
+                              ? 'bg-indigo-50'
+                              : 'hover:bg-slate-50'
+                          } ${snap.isDragging ? 'shadow-lg ring-1 ring-indigo-400' : ''}`}
                         >
                           {editingId === workspace.id ? (
                             <div className="px-2 py-1.5 space-y-1.5">
                               <input
                                 autoFocus
-                                className="w-full rounded border bg-transparent px-2 py-1 text-sm"
+                                className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-sm text-slate-900"
                                 value={editingName}
                                 onChange={(e) => setEditingName(e.target.value)}
                                 onKeyDown={(e) => {
@@ -185,12 +185,12 @@ export function HostedSidebar({
                               />
                               <div className="flex gap-1">
                                 <button
-                                  className="text-xs px-2 py-0.5 rounded bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] font-semibold"
+                                  className="text-xs px-2 py-0.5 rounded bg-indigo-600 hover:bg-indigo-700 text-white font-semibold"
                                   onClick={commitEdit}
                                 >
                                   Save
                                 </button>
-                                <button className="text-xs px-2 py-0.5 rounded border" onClick={cancelEdit}>
+                                <button className="text-xs px-2 py-0.5 rounded border border-slate-300 bg-white text-slate-700 hover:bg-slate-50" onClick={cancelEdit}>
                                   Cancel
                                 </button>
                               </div>
@@ -212,8 +212,8 @@ export function HostedSidebar({
                                 />
                                 <span className={`text-sm truncate ${
                                   selectedWorkspaceId === workspace.id
-                                    ? 'text-[hsl(var(--accent-foreground))] font-medium'
-                                    : 'text-[hsl(var(--foreground))]'
+                                    ? 'text-indigo-900 font-semibold'
+                                    : 'text-slate-800'
                                 }`}>{workspace.name}</span>
                               </div>
 
@@ -223,7 +223,7 @@ export function HostedSidebar({
                                     e.stopPropagation()
                                     startEdit(workspace)
                                   }}
-                                  className="text-xs px-1.5 py-1 rounded hover:bg-[hsl(var(--background))]/50"
+                                  className="text-xs px-1.5 py-1 rounded text-slate-500 hover:bg-slate-100 hover:text-slate-700"
                                   title="Rename workspace"
                                   aria-label="Rename"
                                 >
@@ -234,7 +234,7 @@ export function HostedSidebar({
                                     e.stopPropagation()
                                     setSettingsForId(workspace.id)
                                   }}
-                                  className="text-xs px-1.5 py-1 rounded hover:bg-[hsl(var(--background))]/50"
+                                  className="text-xs px-1.5 py-1 rounded text-slate-500 hover:bg-slate-100 hover:text-slate-700"
                                   title="Workspace settings (color, page URLs)"
                                   aria-label="Settings"
                                 >
@@ -245,7 +245,7 @@ export function HostedSidebar({
                                     e.stopPropagation()
                                     void handleDelete(workspace)
                                   }}
-                                  className="text-xs px-1.5 py-1 rounded hover:bg-red-500/20 text-red-500"
+                                  className="text-xs px-1.5 py-1 rounded text-red-500 hover:bg-red-50 hover:text-red-700"
                                   title="Delete workspace"
                                   aria-label="Delete"
                                 >
@@ -265,7 +265,7 @@ export function HostedSidebar({
           </DragDropContext>
 
           {workspaces.length === 0 && (
-            <p className="text-xs text-[hsl(var(--muted-foreground))] mt-2 px-2">
+            <p className="text-xs text-slate-500 mt-2 px-2">
               No workspaces yet. Click + above to add one.
             </p>
           )}
@@ -323,8 +323,8 @@ function SidebarLink({
       href={href}
       className={`block rounded-md px-3 py-2 transition-colors ${
         isActive
-          ? 'bg-[hsl(var(--accent))] text-[hsl(var(--accent-foreground))]'
-          : 'text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--accent))]/40 hover:text-[hsl(var(--foreground))]'
+          ? 'bg-indigo-50 text-indigo-700 font-medium'
+          : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900'
       }`}
     >
       {label}

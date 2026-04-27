@@ -4,30 +4,29 @@ import { useEffect, useState } from 'react'
 import type { Workspace } from '@/lib/types'
 
 /**
- * Round 7.1 — modal for creating a new workspace.
+ * Workspace creation modal — Round 7.1.2.
  *
- * Replaces the inline name-only input that lived at the bottom of the
- * sidebar in earlier rounds. New workspaces collected the full
- * configuration up-front (Facebook page URL especially) so the user
- * doesn't need to immediately follow up with a ⚙ click to make
- * Facebook metric fetching work.
+ * 7.1 used `text-[hsl(var(--muted-foreground))]` for labels and
+ * placeholders. When the deployed CSS variables resolved to a too-pale
+ * value, labels and placeholders became unreadable on the white modal.
  *
- * Same shape as WorkspaceEditDialog (Round 6.4) but POSTs to
- * /api/workspaces instead of PATCHing /api/workspaces/:id. Could
- * theoretically share a base component; not worth the abstraction
- * cost for two callers.
+ * 7.1.2 hardcodes slate colours so the dialog cannot render with
+ * invisible text regardless of what the variable system does:
+ *   - Labels: slate-700 (clearly readable on white)
+ *   - Body / help text: slate-600
+ *   - Inputs: slate-900 text on white background, slate-300 border
+ *   - Placeholders: slate-400 (visible but quiet)
+ *   - Primary button: indigo-600
+ *
+ * No CSS variables. Deliberate. The modal works regardless of theme.
  */
 export function WorkspaceCreateDialog({
   onClose,
   onCreated,
 }: {
   onClose: () => void
-  /** Called with the freshly-created workspace so the parent can splice
-   * it into local state without a refetch round-trip. */
   onCreated: (created: Workspace) => void
 }) {
-  // Default colour: Monday-style indigo, matching the new primary.
-  // User can change it before saving.
   const [name, setName] = useState('')
   const [color, setColor] = useState('#6366f1')
   const [facebookPageUrl, setFacebookPageUrl] = useState('')
@@ -61,8 +60,6 @@ export function WorkspaceCreateDialog({
         return
       }
       const data = (await res.json()) as { workspace: Workspace } | Workspace
-      // /api/workspaces POST historically returned the workspace object
-      // directly; defensively support both shapes.
       const created = 'workspace' in data ? data.workspace : (data as Workspace)
       onCreated(created)
       onClose()
@@ -73,7 +70,6 @@ export function WorkspaceCreateDialog({
     }
   }
 
-  // Esc closes the modal — same UX contract as WorkspaceEditDialog.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && !saving) onClose()
@@ -82,18 +78,21 @@ export function WorkspaceCreateDialog({
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose, saving])
 
+  const inputClass =
+    'mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500'
+
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4"
       onClick={() => !saving && onClose()}
     >
       <div
-        className="w-full max-w-lg rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] surface-shadow"
+        className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="px-6 py-4 border-b border-[hsl(var(--border))]">
-          <h2 className="text-lg font-semibold">Create workspace</h2>
-          <p className="text-xs text-[hsl(var(--muted-foreground))] mt-0.5">
+        <div className="px-6 py-4 border-b border-slate-200">
+          <h2 className="text-lg font-semibold text-slate-900">Create workspace</h2>
+          <p className="text-xs text-slate-600 mt-0.5 leading-relaxed">
             Set up the workspace and the page URLs the metric fetcher uses.
             Facebook fetching needs the page URL — you can add it later but
             adding it now means it works on the first try.
@@ -102,7 +101,7 @@ export function WorkspaceCreateDialog({
 
         <div className="px-6 py-5 space-y-5">
           <label className="block">
-            <span className="text-xs uppercase tracking-wider text-[hsl(var(--muted-foreground))]">
+            <span className="text-xs uppercase tracking-wider font-semibold text-slate-700">
               Name
             </span>
             <input
@@ -111,13 +110,13 @@ export function WorkspaceCreateDialog({
               value={name}
               onChange={(e) => setName(e.target.value)}
               maxLength={120}
-              className="mt-1 w-full rounded-lg border bg-transparent px-3 py-2 text-sm"
+              className={inputClass}
               placeholder="e.g. Acme Corp"
             />
           </label>
 
           <label className="block">
-            <span className="text-xs uppercase tracking-wider text-[hsl(var(--muted-foreground))]">
+            <span className="text-xs uppercase tracking-wider font-semibold text-slate-700">
               Color
             </span>
             <div className="mt-1 flex items-center gap-3">
@@ -125,27 +124,27 @@ export function WorkspaceCreateDialog({
                 type="color"
                 value={color}
                 onChange={(e) => setColor(e.target.value)}
-                className="h-10 w-16 rounded border bg-transparent cursor-pointer"
+                className="h-10 w-16 rounded border border-slate-300 bg-white cursor-pointer"
                 aria-label="Workspace color"
               />
-              <span className="text-xs text-[hsl(var(--muted-foreground))] font-mono">
+              <span className="text-xs text-slate-600 font-mono">
                 {color}
               </span>
             </div>
           </label>
 
           <label className="block">
-            <span className="text-xs uppercase tracking-wider text-[hsl(var(--muted-foreground))]">
+            <span className="text-xs uppercase tracking-wider font-semibold text-slate-700">
               Facebook page URL
             </span>
             <input
               type="url"
               value={facebookPageUrl}
               onChange={(e) => setFacebookPageUrl(e.target.value)}
-              className="mt-1 w-full rounded-lg border bg-transparent px-3 py-2 text-sm"
+              className={inputClass}
               placeholder="https://www.facebook.com/yourbrandpage"
             />
-            <p className="text-[11px] text-[hsl(var(--muted-foreground))] mt-1.5 leading-relaxed">
+            <p className="text-[11px] text-slate-600 mt-1.5 leading-relaxed">
               Required for Facebook metric fetching. The fetcher scrapes
               this page and locates the post you&apos;re fetching among
               its 50 most recent posts.
@@ -153,9 +152,9 @@ export function WorkspaceCreateDialog({
           </label>
 
           <label className="block">
-            <span className="text-xs uppercase tracking-wider text-[hsl(var(--muted-foreground))]">
+            <span className="text-xs uppercase tracking-wider font-semibold text-slate-700">
               Instagram page URL{' '}
-              <span className="text-[10px] normal-case tracking-normal opacity-60">
+              <span className="text-[10px] normal-case tracking-normal text-slate-500">
                 (optional)
               </span>
             </span>
@@ -163,24 +162,24 @@ export function WorkspaceCreateDialog({
               type="url"
               value={instagramPageUrl}
               onChange={(e) => setInstagramPageUrl(e.target.value)}
-              className="mt-1 w-full rounded-lg border bg-transparent px-3 py-2 text-sm"
+              className={inputClass}
               placeholder="https://www.instagram.com/yourbrandhandle"
             />
           </label>
 
           {error && (
-            <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-600">
+            <div className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700">
               {error}
             </div>
           )}
         </div>
 
-        <div className="px-6 py-4 border-t border-[hsl(var(--border))] flex items-center justify-end gap-2">
+        <div className="px-6 py-4 border-t border-slate-200 flex items-center justify-end gap-2">
           <button
             type="button"
             onClick={onClose}
             disabled={saving}
-            className="rounded-lg border border-[hsl(var(--border))] px-4 py-2 text-sm hover:bg-[hsl(var(--accent))]/40 disabled:opacity-50"
+            className="rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 px-4 py-2 text-sm disabled:opacity-50"
           >
             Cancel
           </button>
@@ -188,7 +187,7 @@ export function WorkspaceCreateDialog({
             type="button"
             onClick={handleSave}
             disabled={saving || !name.trim()}
-            className="rounded-lg bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] font-semibold px-4 py-2 text-sm disabled:opacity-50"
+            className="rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-4 py-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {saving ? 'Creating…' : 'Create workspace'}
           </button>

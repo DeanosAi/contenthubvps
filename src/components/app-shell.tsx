@@ -435,7 +435,7 @@ export function AppShell() {
    * many workspaces.
    */
   return (
-    <div className="min-h-screen p-6 lg:p-8">
+    <div className="min-h-screen p-6 lg:p-8 bg-slate-100 text-slate-900">
       <div className="grid grid-cols-[260px_minmax(0,1fr)] gap-6 max-w-[1600px] mx-auto">
         <HostedSidebar
           workspaces={workspaces}
@@ -472,10 +472,10 @@ export function AppShell() {
                  a colored badge so the page still tells you which
                  workspace you're viewing. */}
               <div className="flex items-center gap-3 flex-wrap">
-                <h1 className="text-3xl font-bold">Dashboard</h1>
+                <h1 className="text-3xl font-bold text-slate-900">Dashboard</h1>
                 {activeWorkspace && (
                   <span
-                    className="inline-flex items-center gap-2 rounded-full px-3 py-1 text-sm font-medium border border-[hsl(var(--border))] bg-[hsl(var(--card))]"
+                    className="inline-flex items-center gap-2 rounded-full px-3 py-1 text-sm font-medium border border-slate-200 bg-white text-slate-700"
                     title="Currently selected workspace"
                   >
                     <span
@@ -487,14 +487,14 @@ export function AppShell() {
                 )}
               </div>
               {!activeWorkspace && !loading && (
-                <p className="text-[hsl(var(--muted-foreground))] text-sm mt-2">
+                <p className="text-slate-600 text-sm mt-2">
                   Select a workspace from the sidebar to get started.
                 </p>
               )}
             </div>
             <div className="flex items-center gap-2 flex-wrap">
               <button
-                className="rounded-lg bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] font-semibold px-4 py-2 text-sm disabled:opacity-50"
+                className="rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-4 py-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                 onClick={() => setCreateOpen(true)}
                 disabled={!selectedWorkspaceId}
                 title={!selectedWorkspaceId ? 'Select a workspace first' : undefined}
@@ -502,7 +502,7 @@ export function AppShell() {
                 + New job
               </button>
               <button
-                className="rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--card))] text-[hsl(var(--foreground))] hover:bg-[hsl(var(--accent))] transition-colors px-4 py-2 text-sm disabled:opacity-50"
+                className="rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 transition-colors px-4 py-2 text-sm disabled:opacity-50"
                 onClick={refreshWorkspaceMetrics}
                 disabled={!selectedWorkspaceId || refreshState != null}
                 title={
@@ -516,7 +516,7 @@ export function AppShell() {
                   : 'Refresh metrics'}
               </button>
               <button
-                className="rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--card))] text-[hsl(var(--foreground))] hover:bg-[hsl(var(--accent))] transition-colors px-4 py-2 text-sm"
+                className="rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 transition-colors px-4 py-2 text-sm"
                 onClick={logout}
               >
                 Log out
@@ -525,7 +525,7 @@ export function AppShell() {
           </section>
 
           {errorMessage && (
-            <div className="rounded-lg border border-[hsl(var(--destructive))]/30 bg-[hsl(var(--destructive))]/10 px-4 py-3 text-sm text-[hsl(var(--destructive))] flex items-center justify-between">
+            <div className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700 flex items-center justify-between">
               <span>{errorMessage}</span>
               <button className="text-xs underline" onClick={() => setErrorMessage(null)}>
                 Dismiss
@@ -551,10 +551,10 @@ export function AppShell() {
         <section className="col-span-2 space-y-4 min-w-0">
           <div className="flex items-center justify-between gap-4">
             <div>
-              <h2 className="text-2xl font-semibold">
+              <h2 className="text-2xl font-semibold text-slate-900">
                 {view === 'kanban' ? 'Kanban' : 'All jobs'}
               </h2>
-              <p className="text-[hsl(var(--muted-foreground))] text-sm mt-1">
+              <p className="text-slate-600 text-sm mt-1">
                 {visibleJobs.length} {visibleJobs.length === 1 ? 'job' : 'jobs'} shown
               </p>
             </div>
