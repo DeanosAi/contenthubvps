@@ -435,7 +435,7 @@ export function AppShell() {
    * many workspaces.
    */
   return (
-    <div className="min-h-screen p-6 lg:p-8">
+    <div className="min-h-screen p-6 lg:p-8 bg-slate-100 text-slate-900">
       <div className="grid grid-cols-[260px_minmax(0,1fr)] gap-6 max-w-[1600px] mx-auto">
         <HostedSidebar
           workspaces={workspaces}

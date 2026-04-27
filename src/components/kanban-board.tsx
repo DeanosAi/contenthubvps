@@ -49,7 +49,6 @@ export function KanbanBoard({
   onMoveJob: (jobId: string, newStage: JobStage) => void
 }) {
   const { users } = useUsers()
-
   const userById = useMemo(() => {
     const m = new Map<string, { name: string | null; email: string }>()
     for (const u of users) m.set(u.id, { name: u.name, email: u.email })
@@ -81,17 +80,17 @@ export function KanbanBoard({
               <div
                 ref={provided.innerRef}
                 {...provided.droppableProps}
-                className={`rounded-2xl border kanban-shadow min-h-[460px] flex flex-col transition-colors ${
-                  snapshot.isDraggingOver ? 'ring-2 ring-[hsl(var(--primary))]/60' : ''
+                className={`rounded-2xl border border-slate-200 kanban-shadow min-h-[460px] flex flex-col transition-colors ${
+                  snapshot.isDraggingOver ? 'ring-2 ring-indigo-400' : ''
                 }`}
                 style={{ backgroundColor: column.bg }}
               >
-                <div className="p-4 border-b bg-[hsl(var(--card))]/70 backdrop-blur-sm flex items-center justify-between rounded-t-2xl">
+                <div className="p-4 border-b border-slate-200/60 bg-white/70 backdrop-blur-sm flex items-center justify-between rounded-t-2xl">
                   <div className="flex items-center gap-2">
                     <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: column.dot }} />
-                    <h3 className="font-semibold text-sm">{column.label}</h3>
+                    <h3 className="font-semibold text-sm text-slate-900">{column.label}</h3>
                   </div>
-                  <span className="text-xs text-[hsl(var(--muted-foreground))] rounded-full border px-2 py-1">
+                  <span className="text-xs text-slate-600 rounded-full border border-slate-300 bg-white px-2 py-1">
                     {column.jobs.length}
                   </span>
                 </div>
@@ -113,6 +112,10 @@ export function KanbanBoard({
                           // doesn't move on drop." The library docs
                           // explicitly recommend div + role="button" +
                           // tabIndex + keyboard handler for accessibility.
+                          //
+                          // Round 7.1.5: cards now use bg-white (was the
+                          // page background) so they have proper depth
+                          // against the column's tinted backdrop.
                           <div
                             ref={prov.innerRef}
                             {...prov.draggableProps}
@@ -129,57 +132,54 @@ export function KanbanBoard({
                                 onSelectJob(job)
                               }
                             }}
-                            className={`w-full text-left rounded-xl border bg-[hsl(var(--background))] p-3 space-y-2 shadow-sm hover:border-[hsl(var(--primary))]/40 transition-colors cursor-pointer ${
-                              snap.isDragging ? 'shadow-xl ring-1 ring-[hsl(var(--primary))]/60' : ''
+                            className={`w-full text-left rounded-xl border border-slate-200 bg-white p-3 space-y-2 shadow-sm hover:border-indigo-400 hover:shadow-md transition-all cursor-pointer ${
+                              snap.isDragging ? 'shadow-xl ring-2 ring-indigo-400' : ''
                             }`}
                           >
                             <div className="flex items-start justify-between gap-2">
-                              <h4 className="font-medium text-sm leading-snug line-clamp-2">{job.title}</h4>
+                              <h4 className="font-medium text-sm leading-snug line-clamp-2 text-slate-900">{job.title}</h4>
                               {job.priority > 0 && (
-                                <span className="shrink-0 text-[10px] rounded-full bg-[hsl(var(--primary))]/15 text-[hsl(var(--primary))] px-2 py-0.5 font-semibold">
+                                <span className="shrink-0 text-[10px] rounded-full bg-indigo-50 text-indigo-700 px-2 py-0.5 font-semibold">
                                   P{job.priority}
                                 </span>
                               )}
                             </div>
-
                             {job.description && (
-                              <p className="text-xs text-[hsl(var(--muted-foreground))] line-clamp-2">{job.description}</p>
+                              <p className="text-xs text-slate-600 line-clamp-2">{job.description}</p>
                             )}
-
-                            <div className="flex flex-wrap gap-1.5 text-[10px] text-[hsl(var(--muted-foreground))]">
+                            <div className="flex flex-wrap gap-1.5 text-[10px] text-slate-600">
                               {job.platform && (
-                                <span className="rounded-full border px-2 py-0.5">{job.platform}</span>
+                                <span className="rounded-full border border-slate-300 bg-slate-50 px-2 py-0.5">{job.platform}</span>
                               )}
                               {job.contentType && (
-                                <span className="rounded-full border px-2 py-0.5">{job.contentType}</span>
+                                <span className="rounded-full border border-slate-300 bg-slate-50 px-2 py-0.5">{job.contentType}</span>
                               )}
                               {due && (
                                 <span
                                   className={`rounded-full border px-2 py-0.5 ${
                                     due.overdue && job.stage !== 'posted' && job.stage !== 'archive'
-                                      ? 'border-red-500/40 text-red-300'
-                                      : ''
+                                      ? 'border-red-300 bg-red-50 text-red-700 font-medium'
+                                      : 'border-slate-300 bg-slate-50'
                                   }`}
                                 >
                                   {due.text}
                                 </span>
                               )}
                               {job.assetLinks.length > 0 && (
-                                <span className="rounded-full border px-2 py-0.5">
+                                <span className="rounded-full border border-slate-300 bg-slate-50 px-2 py-0.5">
                                   📎 {job.assetLinks.length}
                                 </span>
                               )}
                             </div>
-
                             {assignee && (
                               <div className="flex items-center gap-2 pt-1">
                                 <span
-                                  className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-[hsl(var(--primary))]/15 text-[10px] font-semibold text-[hsl(var(--primary))]"
+                                  className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-indigo-100 text-[10px] font-semibold text-indigo-700"
                                   title={assignee.name || assignee.email}
                                 >
                                   {initialsFor(assignee.name || assignee.email)}
                                 </span>
-                                <span className="text-[10px] text-[hsl(var(--muted-foreground))] truncate">
+                                <span className="text-[10px] text-slate-600 truncate">
                                   {assignee.name || assignee.email}
                                 </span>
                               </div>
@@ -191,7 +191,7 @@ export function KanbanBoard({
                   })}
                   {provided.placeholder}
                   {column.jobs.length === 0 && !snapshot.isDraggingOver && (
-                    <p className="text-xs text-[hsl(var(--muted-foreground))]">No jobs</p>
+                    <p className="text-xs text-slate-500">No jobs</p>
                   )}
                 </div>
               </div>
