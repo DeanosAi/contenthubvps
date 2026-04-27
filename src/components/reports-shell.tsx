@@ -307,7 +307,7 @@ export function ReportsShell() {
         filename = `report-${safeName}-${fromIso}-to-${toIso}.pdf`
       }
 
-      const blob = await pdf(doc as unknown as Parameters<typeof pdf>[0]).toBlob()
+      const blob = await pdf(doc as any).toBlob()
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
@@ -325,84 +325,91 @@ export function ReportsShell() {
   }
 
   // ---------- render ----------
+  /*
+   * Round 7.1.4: switched to the same grid layout as app-shell. Sidebar
+   * sits as a card in row 1 col 1; main content in row 1 col 2. No more
+   * full-bleed left rail + dark page background.
+   */
   return (
-    <div className="flex min-h-screen">
-      <HostedSidebar
-        workspaces={workspaces}
-        selectedWorkspaceId={selectedWorkspaceId}
-        onSelectWorkspace={setSelectedWorkspaceId}
-        onCreateWorkspace={createWorkspace}
-        onRenameWorkspace={renameWorkspace}
-        onDeleteWorkspace={deleteWorkspace}
-        onReorderWorkspaces={reorderWorkspaces}
-        onWorkspaceUpdated={(updated) => {
-          setWorkspaces((prev) =>
-            prev.map((w) => (w.id === updated.id ? updated : w)),
-          )
-        }}
-      />
+    <div className="min-h-screen p-6 lg:p-8">
+      <div className="grid grid-cols-[260px_minmax(0,1fr)] gap-6 max-w-[1600px] mx-auto">
+        <HostedSidebar
+          workspaces={workspaces}
+          selectedWorkspaceId={selectedWorkspaceId}
+          onSelectWorkspace={setSelectedWorkspaceId}
+          onCreateWorkspace={createWorkspace}
+          onRenameWorkspace={renameWorkspace}
+          onDeleteWorkspace={deleteWorkspace}
+          onReorderWorkspaces={reorderWorkspaces}
+          onWorkspaceUpdated={(updated) => {
+            setWorkspaces((prev) =>
+              prev.map((w) => (w.id === updated.id ? updated : w)),
+            )
+          }}
+          onWorkspaceCreated={(created) => {
+            setWorkspaces((prev) => [...prev, created])
+            setSelectedWorkspaceId(created.id)
+          }}
+        />
 
-      <main className="flex-1 p-8 space-y-6">
-        <section className="flex items-start justify-between gap-6 flex-wrap">
-          <div>
-            <p className="text-sm uppercase tracking-[0.25em] text-[hsl(var(--muted-foreground))]">
-              Hosted Content Hub
-            </p>
-            <h1 className="text-4xl font-bold mt-2">Reports</h1>
-            <p className="text-[hsl(var(--muted-foreground))] mt-3 max-w-3xl">
-              Performance over a chosen window. Pick a workspace and date range,
-              then download a PDF for sharing with management or clients.
-            </p>
-          </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <Link
-              href="/app"
-              className="rounded-lg border px-3 py-2 text-sm hover:bg-[hsl(var(--accent))]/40"
-            >
-              Back to dashboard
-            </Link>
-            <button
-              className="rounded-lg border border-[hsl(var(--border))] px-4 py-2 text-sm text-[hsl(var(--foreground))]"
-              onClick={logout}
-            >
-              Log out
-            </button>
-          </div>
-        </section>
-
-        {errorMessage && (
-          <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200 flex items-center justify-between">
-            <span>{errorMessage}</span>
-            <button className="text-xs underline" onClick={() => setErrorMessage(null)}>
-              Dismiss
-            </button>
-          </div>
-        )}
-
-        {/* Report type pill toggle — Standard or Quarterly Deep-Dive. */}
-        <section className="flex items-center gap-3">
-          <span className="text-xs uppercase tracking-wider text-[hsl(var(--muted-foreground))]">
-            Report type
-          </span>
-          <div className="inline-flex items-center rounded-lg border border-[hsl(var(--border))] p-0.5 bg-[hsl(var(--card))]">
-            {([
-              { value: 'standard', label: 'Standard' },
-              { value: 'deepDive', label: 'Quarterly deep-dive' },
-              { value: 'campaign', label: 'Campaign report' },
-            ] as const).map((t) => (
-              <button
-                key={t.value}
-                type="button"
-                onClick={() => setReportType(t.value)}
-                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                  reportType === t.value
-                    ? 'bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]'
-                    : 'text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]'
-                }`}
+        <main className="space-y-6 min-w-0">
+          <section className="flex items-start justify-between gap-6 flex-wrap">
+            <div>
+              <h1 className="text-3xl font-bold text-slate-900">Reports</h1>
+              <p className="text-slate-600 mt-2 max-w-3xl">
+                Performance over a chosen window. Pick a workspace and date range,
+                then download a PDF for sharing with management or clients.
+              </p>
+            </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <Link
+                href="/app"
+                className="rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 px-3 py-2 text-sm transition-colors"
               >
-                {t.label}
+                Back to dashboard
+              </Link>
+              <button
+                className="rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 px-4 py-2 text-sm transition-colors"
+                onClick={logout}
+              >
+                Log out
               </button>
-            ))}
+            </div>
+          </section>
+
+          {errorMessage && (
+            <div className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700 flex items-center justify-between">
+              <span>{errorMessage}</span>
+              <button className="text-xs underline" onClick={() => setErrorMessage(null)}>
+                Dismiss
+              </button>
+            </div>
+          )}
+
+          {/* Report type pill toggle — Standard or Quarterly Deep-Dive or Campaign. */}
+          <section className="flex items-center gap-3">
+            <span className="text-xs uppercase tracking-wider font-semibold text-slate-600">
+              Report type
+            </span>
+            <div className="inline-flex items-center rounded-lg border border-slate-200 p-0.5 bg-white">
+              {([
+                { value: 'standard', label: 'Standard' },
+                { value: 'deepDive', label: 'Quarterly deep-dive' },
+                { value: 'campaign', label: 'Campaign report' },
+              ] as const).map((t) => (
+                <button
+                  key={t.value}
+                  type="button"
+                  onClick={() => setReportType(t.value)}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                    reportType === t.value
+                      ? 'bg-indigo-600 text-white'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  {t.label}
+                </button>
+              ))}
           </div>
         </section>
 
@@ -483,14 +490,14 @@ export function ReportsShell() {
             <ReportsCharts series={series} platformRows={platformRows} />
 
             <section className="space-y-2">
-              <h2 className="text-sm font-semibold uppercase tracking-wider text-[hsl(var(--muted-foreground))]">
+              <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-600">
                 Platform breakdown
               </h2>
               <ReportsPlatformTable rows={platformRows} />
             </section>
 
             <section className="space-y-2">
-              <h2 className="text-sm font-semibold uppercase tracking-wider text-[hsl(var(--muted-foreground))]">
+              <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-600">
                 Top performers
               </h2>
               <ReportsTopPosts byPlatform={topByPlatform} />
@@ -502,14 +509,14 @@ export function ReportsShell() {
             <ReportsDeepDiveMonthlyChart monthly={deepDive.monthly} />
 
             <section className="space-y-2">
-              <h2 className="text-sm font-semibold uppercase tracking-wider text-[hsl(var(--muted-foreground))]">
+              <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-600">
                 Platform comparison
               </h2>
               <ReportsDeepDivePlatformTable rows={deepDive.platforms} />
             </section>
 
             <section className="space-y-2">
-              <h2 className="text-sm font-semibold uppercase tracking-wider text-[hsl(var(--muted-foreground))]">
+              <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-600">
                 Recommendations{' '}
                 {recommendations.length > 0 && (
                   <span className="ml-1 text-[hsl(var(--muted-foreground))] font-normal normal-case tracking-normal">
@@ -526,6 +533,7 @@ export function ReportsShell() {
           </div>
         )}
       </main>
+      </div>
     </div>
   )
 }

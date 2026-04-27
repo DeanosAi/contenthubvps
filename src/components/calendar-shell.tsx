@@ -159,69 +159,71 @@ export function CalendarShell() {
 
   // ---------- render ----------
   return (
-    <div className="flex min-h-screen">
-      <HostedSidebar
-        workspaces={workspaces}
-        selectedWorkspaceId={selectedWorkspaceId}
-        onSelectWorkspace={setSelectedWorkspaceId}
-        onCreateWorkspace={createWorkspace}
-        onRenameWorkspace={renameWorkspace}
-        onDeleteWorkspace={deleteWorkspace}
-        onReorderWorkspaces={reorderWorkspaces}
-        onWorkspaceUpdated={(updated) => {
-          setWorkspaces((prev) =>
-            prev.map((w) => (w.id === updated.id ? updated : w)),
-          )
-        }}
-      />
+    <div className="min-h-screen p-6 lg:p-8">
+      <div className="grid grid-cols-[260px_minmax(0,1fr)] gap-6 max-w-[1600px] mx-auto">
+        <HostedSidebar
+          workspaces={workspaces}
+          selectedWorkspaceId={selectedWorkspaceId}
+          onSelectWorkspace={setSelectedWorkspaceId}
+          onCreateWorkspace={createWorkspace}
+          onRenameWorkspace={renameWorkspace}
+          onDeleteWorkspace={deleteWorkspace}
+          onReorderWorkspaces={reorderWorkspaces}
+          onWorkspaceUpdated={(updated) => {
+            setWorkspaces((prev) =>
+              prev.map((w) => (w.id === updated.id ? updated : w)),
+            )
+          }}
+          onWorkspaceCreated={(created) => {
+            setWorkspaces((prev) => [...prev, created])
+            setSelectedWorkspaceId(created.id)
+          }}
+        />
 
-      <main className="flex-1 p-8 space-y-6">
-        <section className="flex items-start justify-between gap-6 flex-wrap">
-          <div>
-            <p className="text-sm uppercase tracking-[0.25em] text-[hsl(var(--muted-foreground))]">
-              Hosted Content Hub
-            </p>
-            <h1 className="text-4xl font-bold mt-2">Calendar</h1>
-            <p className="text-[hsl(var(--muted-foreground))] mt-3 max-w-3xl">
-              Jobs by their due date. Click a date to add, or click a job to edit.
-            </p>
-          </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <Link
-              href="/app"
-              className="rounded-lg border px-3 py-2 text-sm hover:bg-[hsl(var(--accent))]/40"
-            >
-              Back to dashboard
-            </Link>
-            <button
-              className="rounded-lg border border-[hsl(var(--border))] px-4 py-2 text-sm text-[hsl(var(--foreground))]"
-              onClick={logout}
-            >
-              Log out
-            </button>
-          </div>
-        </section>
+        <main className="space-y-6 min-w-0">
+          <section className="flex items-start justify-between gap-6 flex-wrap">
+            <div>
+              <h1 className="text-3xl font-bold text-slate-900">Calendar</h1>
+              <p className="text-slate-600 mt-2 max-w-3xl">
+                Jobs by their due date. Click a date to add, or click a job to edit.
+              </p>
+            </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <Link
+                href="/app"
+                className="rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 px-3 py-2 text-sm transition-colors"
+              >
+                Back to dashboard
+              </Link>
+              <button
+                className="rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 px-4 py-2 text-sm transition-colors"
+                onClick={logout}
+              >
+                Log out
+              </button>
+            </div>
+          </section>
 
-        {errorMessage && (
-          <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200 flex items-center justify-between">
-            <span>{errorMessage}</span>
-            <button className="text-xs underline" onClick={() => setErrorMessage(null)}>
-              Dismiss
-            </button>
-          </div>
-        )}
+          {errorMessage && (
+            <div className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700 flex items-center justify-between">
+              <span>{errorMessage}</span>
+              <button className="text-xs underline" onClick={() => setErrorMessage(null)}>
+                Dismiss
+              </button>
+            </div>
+          )}
 
-        {/* Calendar-specific filter strip — workspace picker + hide-archived */}
-        <section className="rounded-2xl border bg-[hsl(var(--card))] p-4 flex flex-wrap items-center gap-4">
-          <div className="flex items-center gap-2">
-            <label className="text-xs text-[hsl(var(--muted-foreground))]">Workspace</label>
-            <select
-              className="rounded-lg border bg-transparent px-3 py-2 text-sm"
-              value={calendarWorkspaceFilter}
-              onChange={(e) => setCalendarWorkspaceFilter(e.target.value)}
-            >
-              <option value="">All workspaces</option>
-              {workspaces.map((w) => (
+          {/* Calendar-specific filter strip — workspace picker + hide-archived */}
+          <section className="rounded-2xl border border-slate-200 bg-white surface-shadow p-4 flex flex-wrap items-center gap-4">
+            <div className="flex items-center gap-2">
+              <label className="text-xs text-slate-600">Workspace</label>
+              <select
+                className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
+                value={calendarWorkspaceFilter}
+                onChange={(e) => setCalendarWorkspaceFilter(e.target.value)}
+              >
+                <option value="">All workspaces</option>
+                {workspaces.map((w) => (
                 <option key={w.id} value={w.id}>
                   {w.name}
                 </option>
@@ -251,6 +253,7 @@ export function CalendarShell() {
           }}
         />
       </main>
+      </div>
 
       <JobDetailPanel
         job={selectedJob}
