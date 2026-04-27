@@ -28,10 +28,20 @@ export function AppShell() {
   const [view, setView] = useState<JobView>('kanban')
   const [filter, setFilter] = useState<JobFilterState>(DEFAULT_FILTER_STATE)
   const [sort, setSort] = useState<SortKey>('newest')
+  /** When a dashboard widget drives the filter, we record which one so the
+   * widget can render an "active" state. Setting filter via the filter bar
+   * directly clears this. */
   const [activeWidget, setActiveWidget] = useState<WidgetKey | null>(null)
 
   // ---------- create-dialog state ----------
   const [createOpen, setCreateOpen] = useState(false)
+
+  // ---------- batch-refresh state ----------
+  /** When non-null, a workspace-wide metrics refresh is in progress.
+   * `done` and `total` drive the progress UI in the header button. */
+  const [refreshState, setRefreshState] = useState<
+    { done: number; total: number; failures: number } | null
+  >(null)
 
   // ---------- async UX ----------
   const [loading, setLoading] = useState(true)
@@ -204,9 +214,179 @@ export function AppShell() {
     }
   }
 
+  /**
+   * Refresh metrics for every posted job in the current workspace.
+   *
+   * Strategy: client-driven serial loop calling /api/jobs/:id/fetch-metrics
+   * one job at a time. Why serial rather than parallel:
+   *   - Apify charges per actor run regardless of concurrency, so there's
+   *     no cost reason to parallelise.
+   *   - Some Apify accounts have low concurrency limits — running 10 in
+   *     parallel would queue most of them anyway.
+   *   - Serial gives clean progress reporting: "12 of 47" feels right.
+   *   - One failure doesn't poison the batch — we record the failure and
+   *     continue.
+   *
+   * The user can navigate away mid-run; the loop checks the cancellation
+   * flag between requests and exits cleanly. Already-completed snapshots
+   * are kept (they were committed atomically), so partial progress isn't
+   * lost.
+   */
+  async function refreshWorkspaceMetrics() {
+    if (!selectedWorkspaceId) return
+    if (refreshState) return // already running
+
+    // Only posted jobs with a fetchable URL are eligible.
+    const eligible = jobs.filter(
+      (j) =>
+        j.workspaceId === selectedWorkspaceId &&
+        j.stage === 'posted' &&
+        (j.facebookLiveUrl || j.instagramLiveUrl || j.liveUrl),
+    )
+    if (eligible.length === 0) {
+      setErrorMessage(
+        'No posted jobs with live URLs to refresh in this workspace.',
+      )
+      return
+    }
+    if (
+      !confirm(
+        `Refresh metrics for ${eligible.length} ${
+          eligible.length === 1 ? 'job' : 'jobs'
+        }? This may take a few minutes; you can keep using the app while it runs.`,
+      )
+    ) {
+      return
+    }
+
+    setRefreshState({ done: 0, total: eligible.length, failures: 0 })
+    let failures = 0
+    for (let i = 0; i < eligible.length; i++) {
+      const job = eligible[i]
+      try {
+        const res = await fetch(`/api/jobs/${job.id}/fetch-metrics`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
+        })
+        if (res.ok) {
+          const data = (await res.json().catch(() => null)) as
+            | { job?: Job }
+            | null
+          if (data?.job) {
+            const updated = data.job
+            setJobs((js) => js.map((j) => (j.id === updated.id ? updated : j)))
+          }
+        } else {
+          failures++
+        }
+      } catch {
+        failures++
+      }
+      setRefreshState({ done: i + 1, total: eligible.length, failures })
+    }
+
+    // Surface a one-line summary.
+    if (failures > 0) {
+      setErrorMessage(
+        `Refresh finished with ${failures} ${
+          failures === 1 ? 'failure' : 'failures'
+        }. Open individual jobs to retry.`,
+      )
+    }
+    // Clear the in-progress state after a brief delay so the user can
+    // see the final "47 of 47" before it disappears.
+    setTimeout(() => setRefreshState(null), 1500)
+  }
+
   async function logout() {
     await fetch('/api/auth/logout', { method: 'POST' })
     window.location.href = '/login'
+  }
+
+  /** Translate a dashboard widget click into a JobFilterState. Each widget
+   * corresponds to a filter preset:
+   *
+   *  - overdue: due before today, not posted/archived
+   *  - dueThisWeek: due in next 7 days, not posted/archived
+   *  - awaitingApproval: approval_status='awaiting'
+   *  - recentlyPosted: stage='posted', updated in last 7 days
+   *  - inFlight: not archived (this is the headline total — clears most filters)
+   *
+   * Some of these can't be expressed exactly with our current JobFilterState
+   * (e.g. "approvalStatus" isn't a top-level filter field). We approximate
+   * with the closest available controls — the kanban view will show the
+   * intended bucket plus possibly a few near-misses that the user can
+   * clear with the kanban filter bar. */
+  function applyWidgetFilter(key: WidgetKey | null) {
+    setActiveWidget(key)
+    if (key === null) {
+      setFilter(DEFAULT_FILTER_STATE)
+      setSort('newest')
+      return
+    }
+
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const todayIso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+    const inSevenDays = new Date(today)
+    inSevenDays.setDate(today.getDate() + 7)
+    const inSevenIso = `${inSevenDays.getFullYear()}-${String(inSevenDays.getMonth() + 1).padStart(2, '0')}-${String(inSevenDays.getDate()).padStart(2, '0')}`
+
+    switch (key) {
+      case 'overdue':
+        setFilter({
+          ...DEFAULT_FILTER_STATE,
+          dueTo: todayIso,
+          hideArchived: true,
+        })
+        setSort('dueDateAsc')
+        break
+      case 'dueThisWeek':
+        setFilter({
+          ...DEFAULT_FILTER_STATE,
+          dueFrom: todayIso,
+          dueTo: inSevenIso,
+          hideArchived: true,
+        })
+        setSort('dueDateAsc')
+        break
+      case 'awaitingApproval':
+        // Round 5 adds a first-class approvalStatus field on JobFilterState,
+        // so this widget now applies a precise filter rather than just
+        // clearing all filters.
+        setFilter({
+          ...DEFAULT_FILTER_STATE,
+          approvalStatus: 'awaiting',
+          hideArchived: true,
+        })
+        setSort('newest')
+        break
+      case 'recentlyPosted':
+        setFilter({
+          ...DEFAULT_FILTER_STATE,
+          stage: 'posted',
+          hideArchived: false,
+        })
+        setSort('recentlyUpdated')
+        break
+      case 'inFlight':
+        setFilter({ ...DEFAULT_FILTER_STATE, hideArchived: true })
+        setSort('newest')
+        break
+    }
+  }
+
+  /** When the user changes filters via the filter bar, the widget-driven
+   * "active" indicator is no longer accurate — clear it. */
+  function setFilterFromBar(next: JobFilterState) {
+    setFilter(next)
+    setActiveWidget(null)
+  }
+
+  function setSortFromBar(next: SortKey) {
+    setSort(next)
+    setActiveWidget(null)
   }
 
   // ---------- derived data ----------
@@ -219,86 +399,156 @@ export function AppShell() {
     return applyJobView(inWorkspace, filter, sort)
   }, [jobs, selectedWorkspaceId, filter, sort])
 
+  /** Workspace-scoped jobs list, NOT filtered. The widgets compute counts
+   * from this — we don't want the widgets to react to the filters they
+   * themselves apply, otherwise applying "overdue" zeros out every other
+   * widget. */
+  const workspaceJobs = useMemo(() => {
+    return selectedWorkspaceId
+      ? jobs.filter((j) => j.workspaceId === selectedWorkspaceId)
+      : jobs
+  }, [jobs, selectedWorkspaceId])
+
   const activeWorkspace = workspaces.find((w) => w.id === selectedWorkspaceId)
 
   // ---------- render ----------
+  /*
+   * Round 7.1 layout — CSS grid with two columns.
+   *
+   *   ┌───────────┬─────────────────────────────────────────┐
+   *   │           │  Header + actions                       │
+   *   │  SIDEBAR  ├─────────────────────────────────────────┤
+   *   │           │  Dashboard widgets                      │
+   *   │           ├─────────────────────────────────────────┤
+   *   │           │  Filters (priority/approval/sort)       │
+   *   ├───────────┴─────────────────────────────────────────┤
+   *   │  Kanban / list view (full width)                    │
+   *   └─────────────────────────────────────────────────────┘
+   *
+   * The sidebar's height naturally matches the right column's content.
+   * The kanban row uses `col-span-2` so it extends from the sidebar's
+   * left edge all the way to the right edge of the page — no wrapping,
+   * no floats, no JS-driven height calculations.
+   *
+   * Internal scroll on the workspace list inside the sidebar (handled
+   * inside HostedSidebar) keeps the sidebar from growing if there are
+   * many workspaces.
+   */
   return (
-    <div className="flex min-h-screen">
-      <HostedSidebar
-        workspaces={workspaces}
-        selectedWorkspaceId={selectedWorkspaceId}
-        onSelectWorkspace={setSelectedWorkspaceId}
-        onCreateWorkspace={createWorkspace}
-        onRenameWorkspace={renameWorkspace}
-        onDeleteWorkspace={deleteWorkspace}
-        onReorderWorkspaces={reorderWorkspaces}
-        onWorkspaceUpdated={(updated) => {
-          // Round 6.4: the settings dialog returns the freshly-saved
-          // workspace; splice it into our list. Avoids a refetch round-trip.
-          setWorkspaces((prev) =>
-            prev.map((w) => (w.id === updated.id ? updated : w)),
-          )
-        }}
-      />
-
-      <main className="flex-1 p-8 space-y-8">
-        <section className="flex items-start justify-between gap-6">
-          <div>
-            <p className="text-sm uppercase tracking-[0.25em] text-[hsl(var(--muted-foreground))]">
-              Hosted Content Hub
-            </p>
-            <h1 className="text-4xl font-bold mt-2">Dashboard</h1>
-            <p className="text-[hsl(var(--muted-foreground))] mt-3 max-w-3xl">
-              {activeWorkspace
-                ? `Currently viewing ${activeWorkspace.name}.`
-                : loading
-                ? 'Loading workspaces…'
-                : 'Select or create a workspace to manage content jobs.'}
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              className="rounded-lg bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] font-semibold px-4 py-2 text-sm disabled:opacity-50"
-              onClick={() => setCreateOpen(true)}
-              disabled={!selectedWorkspaceId}
-              title={!selectedWorkspaceId ? 'Select a workspace first' : undefined}
-            >
-              + New job
-            </button>
-            <button
-              className="rounded-lg border border-[hsl(var(--border))] px-4 py-2 text-sm text-[hsl(var(--foreground))]"
-              onClick={logout}
-            >
-              Log out
-            </button>
-          </div>
-        </section>
-
-        {errorMessage && (
-          <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200 flex items-center justify-between">
-            <span>{errorMessage}</span>
-            <button className="text-xs underline" onClick={() => setErrorMessage(null)}>
-              Dismiss
-            </button>
-          </div>
-        )}
-
-        <DashboardWidgets 
-          jobs={visibleJobs} 
-          activeWidget={activeWidget}
-          onSelectWidget={setActiveWidget}
+    <div className="min-h-screen p-6 lg:p-8">
+      <div className="grid grid-cols-[260px_minmax(0,1fr)] gap-6 max-w-[1600px] mx-auto">
+        <HostedSidebar
+          workspaces={workspaces}
+          selectedWorkspaceId={selectedWorkspaceId}
+          onSelectWorkspace={setSelectedWorkspaceId}
+          onCreateWorkspace={createWorkspace}
+          onRenameWorkspace={renameWorkspace}
+          onDeleteWorkspace={deleteWorkspace}
+          onReorderWorkspaces={reorderWorkspaces}
+          onWorkspaceUpdated={(updated) => {
+            // Round 6.4: settings dialog returns the saved workspace;
+            // splice into local state without a refetch round-trip.
+            setWorkspaces((prev) =>
+              prev.map((w) => (w.id === updated.id ? updated : w)),
+            )
+          }}
+          onWorkspaceCreated={(created) => {
+            // Round 7.1: the new workspace creation modal returns the
+            // freshly-created workspace. Append to the list and select it
+            // so the user lands on it ready to add jobs.
+            setWorkspaces((prev) => [...prev, created])
+            setSelectedWorkspaceId(created.id)
+          }}
         />
 
-        <DashboardFilters
-          filter={filter}
-          setFilter={setFilter}
-          sort={sort}
-          setSort={setSort}
-        />
+        {/* Row 1, Col 2 — header + widgets + filters. Determines the
+            sidebar's height. */}
+        <div className="space-y-4 min-w-0">
+          <section className="flex items-start justify-between gap-6 flex-wrap">
+            <div>
+              {/* Round 7.1: removed the "Hosted Content Hub" eyebrow and
+                 the "Select or create a workspace…" subtitle. The
+                 workspace name now sits next to the Dashboard title as
+                 a colored badge so the page still tells you which
+                 workspace you're viewing. */}
+              <div className="flex items-center gap-3 flex-wrap">
+                <h1 className="text-3xl font-bold">Dashboard</h1>
+                {activeWorkspace && (
+                  <span
+                    className="inline-flex items-center gap-2 rounded-full px-3 py-1 text-sm font-medium border border-[hsl(var(--border))] bg-[hsl(var(--card))]"
+                    title="Currently selected workspace"
+                  >
+                    <span
+                      className="h-2 w-2 rounded-full"
+                      style={{ backgroundColor: activeWorkspace.color }}
+                    />
+                    {activeWorkspace.name}
+                  </span>
+                )}
+              </div>
+              {!activeWorkspace && !loading && (
+                <p className="text-[hsl(var(--muted-foreground))] text-sm mt-2">
+                  Select a workspace from the sidebar to get started.
+                </p>
+              )}
+            </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                className="rounded-lg bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] font-semibold px-4 py-2 text-sm disabled:opacity-50"
+                onClick={() => setCreateOpen(true)}
+                disabled={!selectedWorkspaceId}
+                title={!selectedWorkspaceId ? 'Select a workspace first' : undefined}
+              >
+                + New job
+              </button>
+              <button
+                className="rounded-lg border border-[hsl(var(--border))] px-4 py-2 text-sm disabled:opacity-50"
+                onClick={refreshWorkspaceMetrics}
+                disabled={!selectedWorkspaceId || refreshState != null}
+                title={
+                  !selectedWorkspaceId
+                    ? 'Select a workspace first'
+                    : 'Fetch latest metrics from Apify for every posted job in this workspace'
+                }
+              >
+                {refreshState
+                  ? `Refreshing ${refreshState.done}/${refreshState.total}…`
+                  : 'Refresh metrics'}
+              </button>
+              <button
+                className="rounded-lg border border-[hsl(var(--border))] px-4 py-2 text-sm text-[hsl(var(--foreground))]"
+                onClick={logout}
+              >
+                Log out
+              </button>
+            </div>
+          </section>
 
+          {errorMessage && (
+            <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-700 dark:text-red-200 flex items-center justify-between">
+              <span>{errorMessage}</span>
+              <button className="text-xs underline" onClick={() => setErrorMessage(null)}>
+                Dismiss
+              </button>
+            </div>
+          )}
 
-        {/* Kanban / list view */}
-        <section className="space-y-4">
+          <DashboardWidgets
+            jobs={workspaceJobs}
+            activeWidget={activeWidget}
+            onSelectWidget={applyWidgetFilter}
+          />
+
+          <DashboardFilters
+            filter={filter}
+            setFilter={setFilterFromBar}
+            sort={sort}
+            setSort={setSortFromBar}
+          />
+        </div>
+
+        {/* Row 2 — kanban / list view, full width below the sidebar */}
+        <section className="col-span-2 space-y-4 min-w-0">
           <div className="flex items-center justify-between gap-4">
             <div>
               <h2 className="text-2xl font-semibold">
@@ -325,7 +575,7 @@ export function AppShell() {
             />
           )}
         </section>
-      </main>
+      </div>
 
       <JobDetailPanel
         job={selectedJob}

@@ -1,6 +1,75 @@
 @import "tailwindcss";
 
+/*
+ * Round 7.1: light theme is now the default.
+ *
+ * The :root values are the LIGHT theme (Monday-inspired: white surfaces,
+ * light grey app background, vibrant accents). A .theme-dark class on
+ * <html> flips to the original dark theme. The toggle is wired in
+ * src/lib/theme.ts and a small bootstrap script in app/layout.tsx
+ * applies the saved choice before paint to avoid flash-of-wrong-theme.
+ *
+ * The contract is "every component reads from these CSS variables", so
+ * adding new themes later (Round 7.3) means defining new variable sets
+ * — no component changes.
+ *
+ * Variable naming follows the shadcn/Tailwind convention so existing
+ * `bg-[hsl(var(--card))]` etc. utilities keep working unchanged.
+ */
+
 :root {
+  /* App surface — the page background behind cards. Soft warm grey,
+     not pure white; pure white feels clinical. */
+  --background: 220 24% 97%;
+  --foreground: 222 30% 14%;
+
+  /* Card surfaces — true white so they read as "raised paper". */
+  --card: 0 0% 100%;
+  --card-foreground: 222 30% 14%;
+
+  --popover: 0 0% 100%;
+  --popover-foreground: 222 30% 14%;
+
+  /* Primary — Monday-style vibrant indigo/violet. Used for buttons,
+     active states, and highlights. */
+  --primary: 250 84% 60%;
+  --primary-foreground: 0 0% 100%;
+
+  /* Secondary surfaces — for soft pill backgrounds, muted buttons. */
+  --secondary: 220 22% 92%;
+  --secondary-foreground: 222 30% 14%;
+
+  /* Muted — used for subdued text and quiet backgrounds. */
+  --muted: 220 22% 94%;
+  --muted-foreground: 220 12% 42%;
+
+  /* Accent — used for hover surfaces and active row tints. Soft, not
+     loud, since we want the primary colour to do the heavy lifting. */
+  --accent: 220 22% 92%;
+  --accent-foreground: 222 30% 18%;
+
+  --destructive: 358 70% 56%;
+  --destructive-foreground: 0 0% 100%;
+
+  /* Border / input — light grey lines that separate surfaces. */
+  --border: 220 18% 88%;
+  --input: 220 18% 88%;
+  --ring: 250 84% 60%;
+
+  /* Round 7.1 additions: a small palette of vibrant chip colours used
+     for badges, kanban column accents, and chart series. Defined here
+     so light + dark themes can specialise them. */
+  --chip-blue: 213 88% 56%;
+  --chip-green: 152 64% 44%;
+  --chip-amber: 38 92% 52%;
+  --chip-red: 358 78% 58%;
+  --chip-purple: 264 72% 58%;
+  --chip-pink: 332 78% 60%;
+  --chip-teal: 184 66% 42%;
+}
+
+/* Dark theme — the previous default, preserved for users who prefer it. */
+.theme-dark {
   --background: 222 28% 12%;
   --foreground: 210 32% 94%;
   --card: 222 24% 16%;
@@ -20,15 +89,39 @@
   --border: 218 18% 26%;
   --input: 218 18% 26%;
   --ring: 263 70% 56%;
+
+  /* Slightly desaturated chips on dark, so they don't vibrate. */
+  --chip-blue: 213 78% 60%;
+  --chip-green: 152 54% 50%;
+  --chip-amber: 38 82% 58%;
+  --chip-red: 358 68% 62%;
+  --chip-purple: 264 62% 64%;
+  --chip-pink: 332 68% 64%;
+  --chip-teal: 184 56% 48%;
 }
 
 body {
   color: hsl(var(--foreground));
+  background: hsl(var(--background));
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+
+/*
+ * Light theme gets a subtle radial wash so the page doesn't feel flat.
+ * Dark theme keeps the original purple/cyan glow to retain its mood.
+ */
+:root:not(.theme-dark) body {
+  background:
+    radial-gradient(circle at top left, hsla(250, 84%, 70%, 0.06), transparent 38%),
+    radial-gradient(circle at top right, hsla(196, 80%, 60%, 0.05), transparent 32%),
+    hsl(var(--background));
+}
+
+.theme-dark body {
   background:
     radial-gradient(circle at top left, hsla(258, 70%, 62%, 0.12), transparent 32%),
     radial-gradient(circle at top right, hsla(196, 80%, 62%, 0.1), transparent 28%),
     linear-gradient(180deg, hsl(var(--background)) 0%, hsl(222 24% 15%) 100%);
-  font-family: Arial, Helvetica, sans-serif;
 }
 
 * {
@@ -36,20 +129,34 @@ body {
 }
 
 /*
- * Native <select> and <option> elements don't inherit Tailwind utility
- * classes the way other elements do — the closed control respects the
- * surrounding bg-transparent, but the open dropdown menu is a native OS
- * widget that uses its own defaults. On the dark theme this produced
- * white text on a white background (unreadable).
+ * Native <select> and <option> elements need explicit theming because
+ * the open dropdown is OS-rendered. We tell the browser which colour
+ * scheme to use via `color-scheme` and paint the <option> rows with
+ * theme variables.
  *
- * The fix below explicitly paints select/option using the dark theme
- * colour tokens. `color-scheme: dark` also tells the browser to render
- * the dropdown's surrounding chrome (scrollbars, focus rings) in dark
- * mode, which most modern browsers respect.
+ * Round 7.1: `color-scheme` is now driven by the theme — `light` by
+ * default, `dark` when .theme-dark is applied — so dropdowns match.
  */
 select {
-  color-scheme: dark;
   color: hsl(var(--foreground));
+}
+
+:root:not(.theme-dark) select,
+:root:not(.theme-dark) input[type="date"],
+:root:not(.theme-dark) input[type="time"],
+:root:not(.theme-dark) input[type="datetime-local"],
+:root:not(.theme-dark) input[type="month"],
+:root:not(.theme-dark) input[type="week"] {
+  color-scheme: light;
+}
+
+.theme-dark select,
+.theme-dark input[type="date"],
+.theme-dark input[type="time"],
+.theme-dark input[type="datetime-local"],
+.theme-dark input[type="month"],
+.theme-dark input[type="week"] {
+  color-scheme: dark;
 }
 
 select option {
@@ -62,12 +169,24 @@ select option:checked {
   color: hsl(var(--accent-foreground));
 }
 
-/* Same treatment for date / time pickers — they also render OS-native
- * pop-ups that need explicit dark-mode signalling. */
-input[type="date"],
-input[type="time"],
-input[type="datetime-local"],
-input[type="month"],
-input[type="week"] {
-  color-scheme: dark;
+/*
+ * Round 7.1: a small set of utility classes for the vibrant chip
+ * colours. Used by stage badges and kanban column accents — saves
+ * components from inlining the same hsl strings everywhere.
+ */
+.chip-blue   { background: hsl(var(--chip-blue)   / 0.12); color: hsl(var(--chip-blue));   }
+.chip-green  { background: hsl(var(--chip-green)  / 0.12); color: hsl(var(--chip-green));  }
+.chip-amber  { background: hsl(var(--chip-amber)  / 0.14); color: hsl(var(--chip-amber));  }
+.chip-red    { background: hsl(var(--chip-red)    / 0.12); color: hsl(var(--chip-red));    }
+.chip-purple { background: hsl(var(--chip-purple) / 0.12); color: hsl(var(--chip-purple)); }
+.chip-pink   { background: hsl(var(--chip-pink)   / 0.12); color: hsl(var(--chip-pink));   }
+.chip-teal   { background: hsl(var(--chip-teal)   / 0.14); color: hsl(var(--chip-teal));   }
+
+/*
+ * Card shadow utility — light theme gets a real soft shadow (Monday
+ * cards have visible shadows that anchor them on white). Dark theme
+ * gets nothing because shadows on dark backgrounds look dirty.
+ */
+:root:not(.theme-dark) .surface-shadow {
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 4px 12px rgba(15, 23, 42, 0.06);
 }

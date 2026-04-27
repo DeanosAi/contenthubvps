@@ -6,23 +6,32 @@ import { usePathname } from 'next/navigation'
 import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd'
 import type { Workspace } from '@/lib/types'
 import { WorkspaceEditDialog } from '@/components/workspace-edit-dialog'
+import { WorkspaceCreateDialog } from '@/components/workspace-create-dialog'
 
-/** Sidebar listing all workspaces with drag-to-reorder, hover-revealed
- * Edit and Delete buttons, and a footer input to add new ones. This is
- * the only place workspaces appear in the chrome — the duplicate
- * grid that lived in the main panel of Round 2 has been removed.
+/**
+ * Sidebar — Round 7.1 layout.
  *
- * Round 6.5 fixes a Round 6.4 regression: the previous version was
- * rebased off the Round 2.1 sidebar (which predated nav links) and so
- * accidentally removed the Dashboard / Calendar / Reports / Settings
- * navigation. Round 6.5 restores the Round 4.2 nav and layers the
- * workspace settings dialog (the Round 6.4 contribution) on top.
+ * Now sits as a self-contained card inside a grid cell rather than a
+ * full-bleed left rail. Height is determined by its grid cell, so it
+ * naturally aligns to the bottom of whatever's in the right column
+ * (header + dashboard widgets + filters). The kanban below extends
+ * full-width, taking the freed horizontal space.
+ *
+ * Layout inside the sidebar:
+ *   - Top: branding + nav links (Dashboard / Calendar / Reports / Settings)
+ *   - Middle: "Workspaces" header with a [+] icon that opens a creation
+ *     modal, then the workspace list (scrolls internally if too tall)
+ *
+ * Removed in 7.1:
+ *   - The bottom name-only create input. Replaced with the modal so
+ *     new workspaces start fully configured (name + color + page URLs).
  *
  * Data flow: this component is presentational + emits intents via the
  * callbacks below. Each page-level shell (AppShell, CalendarShell,
- * ReportsShell, SettingsShell) owns its own canonical workspace state
- * and passes onWorkspaceUpdated to refresh after the settings dialog
- * saves. */
+ * ReportsShell, SettingsShell) owns its own canonical workspace state.
+ * onWorkspaceCreated and onWorkspaceUpdated let the dialogs push the
+ * server's canonical record back up without a refetch.
+ */
 export function HostedSidebar({
   workspaces,
   selectedWorkspaceId,
@@ -32,26 +41,40 @@ export function HostedSidebar({
   onDeleteWorkspace,
   onReorderWorkspaces,
   onWorkspaceUpdated,
+  onWorkspaceCreated,
 }: {
   workspaces: Workspace[]
   selectedWorkspaceId: string
   onSelectWorkspace: (id: string) => void
+  /** Legacy name-only create. Kept for backward compatibility — the
+   * Round 7.1 modal calls /api/workspaces directly via
+   * onWorkspaceCreated, so this callback is no longer triggered from
+   * inside the sidebar. Parents may continue to pass it; we accept and
+   * ignore. */
   onCreateWorkspace: (name: string) => Promise<void>
   onRenameWorkspace: (id: string, name: string) => Promise<void>
   onDeleteWorkspace: (id: string) => Promise<void>
   /** Bulk reorder. Receives the ids in their new order. AppShell calls
    * /api/workspaces/reorder with this list. */
   onReorderWorkspaces: (orderedIds: string[]) => Promise<void>
-  /** Round 6.4 addition (re-delivered in 6.5): called by the settings
-   * dialog with the freshly-saved workspace, so each shell can update
-   * its state without a full refetch. */
-  onWorkspaceUpdated: (updated: Workspace) => void
+  /** Round 6.4: called by the settings dialog with the freshly-saved
+   * workspace, so each shell can update its state without a refetch.
+   * Optional — if not provided, the sidebar still works but the parent
+   * won't know about settings changes until the next reload. */
+  onWorkspaceUpdated?: (updated: Workspace) => void
+  /** Round 7.1: called by the new creation modal with the freshly-
+   * created workspace. Optional for backward compatibility — without
+   * it, new workspaces won't appear in the parent's list until reload. */
+  onWorkspaceCreated?: (created: Workspace) => void
 }) {
+  // onCreateWorkspace is intentionally unused — kept in the prop list
+  // for backward compatibility with callers that still pass it.
+  void onCreateWorkspace
   const pathname = usePathname()
   const [editingId, setEditingId] = useState<string>('')
   const [editingName, setEditingName] = useState('')
-  const [newName, setNewName] = useState('')
   const [settingsForId, setSettingsForId] = useState<string>('')
+  const [createOpen, setCreateOpen] = useState(false)
 
   function startEdit(workspace: Workspace) {
     setEditingId(workspace.id)
@@ -69,13 +92,6 @@ export function HostedSidebar({
     if (!id || !name) return cancelEdit()
     await onRenameWorkspace(id, name)
     cancelEdit()
-  }
-
-  async function commitCreate() {
-    const name = newName.trim()
-    if (!name) return
-    await onCreateWorkspace(name)
-    setNewName('')
   }
 
   async function handleDelete(workspace: Workspace) {
@@ -97,16 +113,18 @@ export function HostedSidebar({
   }
 
   return (
-    <aside className="w-72 border-r bg-[hsl(var(--card))] flex flex-col">
-      <div className="p-4 border-b flex items-center gap-3">
+    <aside className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] surface-shadow flex flex-col self-start overflow-hidden">
+      {/* Branding row */}
+      <div className="px-4 py-3.5 border-b border-[hsl(var(--border))] flex items-center gap-3">
         <div className="h-8 w-8 rounded-lg bg-[hsl(var(--primary))]/15 flex items-center justify-center">
           <div className="h-4 w-4 rounded bg-[hsl(var(--primary))]" />
         </div>
-        <h1 className="text-xl font-bold">Content Hub</h1>
+        <h1 className="text-lg font-bold">Content Hub</h1>
       </div>
 
-      <div className="p-4 border-b">
-        <nav className="space-y-1 text-sm">
+      {/* Page navigation */}
+      <div className="p-3 border-b border-[hsl(var(--border))]">
+        <nav className="space-y-0.5 text-sm">
           <SidebarLink href="/app" label="Dashboard" pathname={pathname} matchPrefix="/app" />
           <SidebarLink href="/calendar" label="Calendar" pathname={pathname} matchPrefix="/calendar" />
           <SidebarLink href="/reports" label="Reports" pathname={pathname} matchPrefix="/reports" />
@@ -114,146 +132,143 @@ export function HostedSidebar({
         </nav>
       </div>
 
-      <div className="p-4 flex-1 overflow-auto">
-        <p className="text-xs font-semibold uppercase tracking-wider text-[hsl(var(--muted-foreground))] mb-3">
-          Workspaces
-        </p>
-
-        <DragDropContext onDragEnd={onDragEnd}>
-          <Droppable droppableId="workspaces">
-            {(provided) => (
-              <div ref={provided.innerRef} {...provided.droppableProps} className="space-y-1">
-                {workspaces.map((workspace, index) => (
-                  <Draggable draggableId={workspace.id} index={index} key={workspace.id}>
-                    {(prov, snap) => (
-                      <div
-                        ref={prov.innerRef}
-                        {...prov.draggableProps}
-                        className={`group rounded-md transition-colors ${
-                          selectedWorkspaceId === workspace.id
-                            ? 'bg-[hsl(var(--accent))] text-[hsl(var(--accent-foreground))]'
-                            : 'hover:bg-[hsl(var(--accent))]/50'
-                        } ${snap.isDragging ? 'shadow-lg ring-1 ring-[hsl(var(--primary))]/60' : ''}`}
-                      >
-                        {editingId === workspace.id ? (
-                          <div className="px-2 py-1.5 space-y-1.5">
-                            <input
-                              autoFocus
-                              className="w-full rounded border bg-transparent px-2 py-1 text-sm"
-                              value={editingName}
-                              onChange={(e) => setEditingName(e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') void commitEdit()
-                                if (e.key === 'Escape') cancelEdit()
-                              }}
-                            />
-                            <div className="flex gap-1">
-                              <button
-                                className="text-xs px-2 py-0.5 rounded bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] font-semibold"
-                                onClick={commitEdit}
-                              >
-                                Save
-                              </button>
-                              <button className="text-xs px-2 py-0.5 rounded border" onClick={cancelEdit}>
-                                Cancel
-                              </button>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-1 px-1">
-                            {/* Drag handle is the "·· name" left side. The
-                                Edit/Delete icons are NOT inside the handle,
-                                so clicking them doesn't trigger a drag. */}
-                            <div
-                              {...prov.dragHandleProps}
-                              onClick={() => onSelectWorkspace(workspace.id)}
-                              className="flex-1 flex items-center gap-2 px-2 py-1.5 cursor-pointer min-w-0"
-                            >
-                              <span
-                                className="w-2.5 h-2.5 rounded-full shrink-0"
-                                style={{ backgroundColor: workspace.color }}
-                              />
-                              <span className="text-sm truncate">{workspace.name}</span>
-                            </div>
-
-                            <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  startEdit(workspace)
-                                }}
-                                className="text-xs px-1.5 py-1 rounded hover:bg-[hsl(var(--background))]/50"
-                                title="Rename workspace"
-                                aria-label="Rename"
-                              >
-                                ✎
-                              </button>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  setSettingsForId(workspace.id)
-                                }}
-                                className="text-xs px-1.5 py-1 rounded hover:bg-[hsl(var(--background))]/50"
-                                title="Workspace settings (color, page URLs)"
-                                aria-label="Settings"
-                              >
-                                ⚙
-                              </button>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  void handleDelete(workspace)
-                                }}
-                                className="text-xs px-1.5 py-1 rounded hover:bg-red-500/20 text-red-400"
-                                title="Delete workspace"
-                                aria-label="Delete"
-                              >
-                                ✕
-                              </button>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </Draggable>
-                ))}
-                {provided.placeholder}
-              </div>
-            )}
-          </Droppable>
-        </DragDropContext>
-
-        {workspaces.length === 0 && (
-          <p className="text-xs text-[hsl(var(--muted-foreground))] mt-2">
-            No workspaces yet. Add one below.
+      {/* Workspaces section */}
+      <div className="flex-1 flex flex-col min-h-0">
+        {/* Header with "Workspaces" + "+" button. Sticky-ish: stays
+            anchored above the scrolling list. */}
+        <div className="px-4 pt-3 pb-2 flex items-center justify-between">
+          <p className="text-xs font-semibold uppercase tracking-wider text-[hsl(var(--muted-foreground))]">
+            Workspaces
           </p>
-        )}
-      </div>
-
-      <div className="p-3 border-t">
-        <div className="flex gap-1.5">
-          <input
-            className="flex-1 rounded border bg-transparent px-2 py-1.5 text-sm"
-            placeholder="New workspace…"
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') void commitCreate()
-            }}
-          />
           <button
-            onClick={commitCreate}
-            disabled={!newName.trim()}
-            className="rounded bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] font-semibold text-sm px-2.5 disabled:opacity-50"
-            aria-label="Add workspace"
+            type="button"
+            onClick={() => setCreateOpen(true)}
+            className="h-6 w-6 rounded-md flex items-center justify-center text-base font-semibold text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--accent))] hover:text-[hsl(var(--foreground))] transition-colors"
+            title="Create a new workspace"
+            aria-label="New workspace"
           >
             +
           </button>
         </div>
+
+        {/* Scroll region. max-h means the sidebar's overall height is
+            bounded — past ~6-7 workspaces, the list scrolls inside this
+            container instead of the sidebar growing. */}
+        <div className="flex-1 overflow-y-auto px-3 pb-3 max-h-[28rem]">
+          <DragDropContext onDragEnd={onDragEnd}>
+            <Droppable droppableId="workspaces">
+              {(provided) => (
+                <div ref={provided.innerRef} {...provided.droppableProps} className="space-y-0.5">
+                  {workspaces.map((workspace, index) => (
+                    <Draggable draggableId={workspace.id} index={index} key={workspace.id}>
+                      {(prov, snap) => (
+                        <div
+                          ref={prov.innerRef}
+                          {...prov.draggableProps}
+                          className={`group rounded-md transition-colors ${
+                            selectedWorkspaceId === workspace.id
+                              ? 'bg-[hsl(var(--accent))] text-[hsl(var(--accent-foreground))]'
+                              : 'hover:bg-[hsl(var(--accent))]/50'
+                          } ${snap.isDragging ? 'shadow-lg ring-1 ring-[hsl(var(--primary))]/60' : ''}`}
+                        >
+                          {editingId === workspace.id ? (
+                            <div className="px-2 py-1.5 space-y-1.5">
+                              <input
+                                autoFocus
+                                className="w-full rounded border bg-transparent px-2 py-1 text-sm"
+                                value={editingName}
+                                onChange={(e) => setEditingName(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') void commitEdit()
+                                  if (e.key === 'Escape') cancelEdit()
+                                }}
+                              />
+                              <div className="flex gap-1">
+                                <button
+                                  className="text-xs px-2 py-0.5 rounded bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] font-semibold"
+                                  onClick={commitEdit}
+                                >
+                                  Save
+                                </button>
+                                <button className="text-xs px-2 py-0.5 rounded border" onClick={cancelEdit}>
+                                  Cancel
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-1 px-1">
+                              {/* Drag handle is the "·· name" left side. The
+                                  Edit/Settings/Delete icons are NOT inside the
+                                  handle, so clicking them doesn't trigger a
+                                  drag. */}
+                              <div
+                                {...prov.dragHandleProps}
+                                onClick={() => onSelectWorkspace(workspace.id)}
+                                className="flex-1 flex items-center gap-2 px-2 py-1.5 cursor-pointer min-w-0"
+                              >
+                                <span
+                                  className="w-2.5 h-2.5 rounded-full shrink-0"
+                                  style={{ backgroundColor: workspace.color }}
+                                />
+                                <span className="text-sm truncate">{workspace.name}</span>
+                              </div>
+
+                              <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    startEdit(workspace)
+                                  }}
+                                  className="text-xs px-1.5 py-1 rounded hover:bg-[hsl(var(--background))]/50"
+                                  title="Rename workspace"
+                                  aria-label="Rename"
+                                >
+                                  ✎
+                                </button>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    setSettingsForId(workspace.id)
+                                  }}
+                                  className="text-xs px-1.5 py-1 rounded hover:bg-[hsl(var(--background))]/50"
+                                  title="Workspace settings (color, page URLs)"
+                                  aria-label="Settings"
+                                >
+                                  ⚙
+                                </button>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    void handleDelete(workspace)
+                                  }}
+                                  className="text-xs px-1.5 py-1 rounded hover:bg-red-500/20 text-red-500"
+                                  title="Delete workspace"
+                                  aria-label="Delete"
+                                >
+                                  ✕
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </Draggable>
+                  ))}
+                  {provided.placeholder}
+                </div>
+              )}
+            </Droppable>
+          </DragDropContext>
+
+          {workspaces.length === 0 && (
+            <p className="text-xs text-[hsl(var(--muted-foreground))] mt-2 px-2">
+              No workspaces yet. Click + above to add one.
+            </p>
+          )}
+        </div>
       </div>
 
-      {/* Round 6.4 settings dialog (re-delivered in 6.5). Rendered inside
-          the sidebar so it lives in the same tree as its trigger button. */}
+      {/* Round 6.4 workspace settings dialog */}
       {settingsForId && (() => {
         const ws = workspaces.find((w) => w.id === settingsForId)
         if (!ws) return null
@@ -262,12 +277,23 @@ export function HostedSidebar({
             workspace={ws}
             onClose={() => setSettingsForId('')}
             onSaved={(updated) => {
-              onWorkspaceUpdated(updated)
+              onWorkspaceUpdated?.(updated)
               setSettingsForId('')
             }}
           />
         )
       })()}
+
+      {/* Round 7.1 workspace creation dialog */}
+      {createOpen && (
+        <WorkspaceCreateDialog
+          onClose={() => setCreateOpen(false)}
+          onCreated={(created) => {
+            onWorkspaceCreated?.(created)
+            setCreateOpen(false)
+          }}
+        />
+      )}
     </aside>
   )
 }
