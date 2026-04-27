@@ -45,10 +45,17 @@ const WIDGETS: WidgetDef[] = [
  * out pastels on the slate-100 page. New scheme: saturated -700 text
  * for readability, -50 background tints for visible cards, -200/-300
  * borders that work on white.
+ *
+ * Round 7.2b.1: the "amber" accent (used by "Due this week") was
+ * reading as orange-red on screen because Tailwind's amber-700 is a
+ * deep brownish-orange (#b45309) — visually too close to red-700.
+ * Swapped the visual classes to Tailwind's yellow palette
+ * (yellow-600 = #ca8a04) so the tile reads clearly as yellow. The
+ * accent key name stays 'amber' to avoid churn elsewhere.
  */
 const ACCENT_RING: Record<WidgetDef['accent'], string> = {
   red: 'ring-red-200 hover:ring-red-400',
-  amber: 'ring-amber-200 hover:ring-amber-400',
+  amber: 'ring-yellow-200 hover:ring-yellow-400',
   cyan: 'ring-cyan-200 hover:ring-cyan-400',
   emerald: 'ring-emerald-200 hover:ring-emerald-400',
   slate: 'ring-slate-200 hover:ring-slate-400',
@@ -56,7 +63,7 @@ const ACCENT_RING: Record<WidgetDef['accent'], string> = {
 
 const ACCENT_TEXT: Record<WidgetDef['accent'], string> = {
   red: 'text-red-700',
-  amber: 'text-amber-700',
+  amber: 'text-yellow-600',
   cyan: 'text-cyan-700',
   emerald: 'text-emerald-700',
   slate: 'text-slate-700',
@@ -64,7 +71,7 @@ const ACCENT_TEXT: Record<WidgetDef['accent'], string> = {
 
 const ACCENT_DOT: Record<WidgetDef['accent'], string> = {
   red: 'bg-red-500',
-  amber: 'bg-amber-500',
+  amber: 'bg-yellow-500',
   cyan: 'bg-cyan-500',
   emerald: 'bg-emerald-500',
   slate: 'bg-slate-500',
