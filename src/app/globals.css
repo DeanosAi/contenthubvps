@@ -1,68 +1,54 @@
 @import "tailwindcss";
 
 /*
- * Round 7.1.2 — single light theme.
+ * Round 7.1.3 — paint the body itself.
  *
- * Earlier rounds tried to support light + dark via a class system on
- * <html>. That fought Tailwind v4's compile order and produced
- * mixed-cascade rendering (white cards on dark page, white text on
- * white cards, etc).
+ * In 7.1.2 the page background was bg-slate-100 on a wrapper <div>
+ * inside app-shell.tsx. That worked for the dashboard but couldn't
+ * cover everything because:
+ *   - There's a parent layout / page wrapper above app-shell with
+ *     dark styling and hero text ("HOSTED APP AREA", etc) that
+ *     leaked through above the wrapper
+ *   - Other shells (reports / calendar / settings) didn't have the
+ *     same wrapper, so their pages stayed dark
  *
- * 7.1.2 removes the dark theme entirely. CSS variables live on :root
- * and resolve to Monday-inspired light values unconditionally. There
- * is no class to apply, no script to run, no localStorage to read.
- * The page CANNOT render in a half-themed state.
- *
- * Dark mode will return in Round 7.3 via Tailwind's built-in `dark:`
- * variant (driven by a class on <html> that the Settings UI
- * controls). Done that way it's additive — every component already
- * works light, and dark just overrides specific utilities.
+ * 7.1.3 fixes this at the lowest possible level: the <body> element.
+ * We paint it slate-100 with hardcoded hex values, no CSS variables,
+ * no class gating. Every page is light. There is no surface above
+ * the body to override.
  */
 
 :root {
-  /* ---- Page surface ---- */
-  /* Pale cool blue-grey — Monday's "calming light blue" page bg. */
+  /* Variables kept for the existing components that read them.
+     Resolved to light-mode values unconditionally. */
   --background: 213 38% 96%;
   --foreground: 222 32% 14%;
 
-  /* ---- Cards ---- */
-  /* Pure white, with surface-shadow giving them lift over the page. */
   --card: 0 0% 100%;
   --card-foreground: 222 32% 14%;
 
   --popover: 0 0% 100%;
   --popover-foreground: 222 32% 14%;
 
-  /* ---- Primary (Monday-style indigo) ---- */
   --primary: 250 84% 60%;
   --primary-foreground: 0 0% 100%;
 
-  /* ---- Secondary surfaces ---- */
-  /* Slightly darker than --background so soft chips are visible. */
   --secondary: 220 22% 92%;
   --secondary-foreground: 222 30% 18%;
 
-  /* ---- Muted ---- */
-  /* For subdued text (date stamps, captions). Important: this MUST
-     stay readable on white cards. Aim for ~4.5:1 contrast minimum. */
   --muted: 220 22% 94%;
-  --muted-foreground: 220 14% 36%;  /* darker than 7.1.1 — was 42% */
+  --muted-foreground: 220 14% 36%;
 
-  /* ---- Accent (hover/active row tint) ---- */
   --accent: 250 30% 94%;
   --accent-foreground: 250 60% 30%;
 
   --destructive: 358 70% 52%;
   --destructive-foreground: 0 0% 100%;
 
-  /* ---- Borders ---- */
-  /* Slightly more visible than 7.1.1 since cards need clear edges
-     against a pale page. */
   --border: 220 18% 86%;
   --input: 220 18% 86%;
   --ring: 250 84% 60%;
 
-  /* ---- Vibrant chip palette (badges, kanban accents, charts) ---- */
   --chip-blue: 213 88% 56%;
   --chip-green: 152 64% 40%;
   --chip-amber: 38 92% 48%;
@@ -74,27 +60,36 @@
   color-scheme: light;
 }
 
-/* Belt-and-braces: paint the body even before Tailwind classes apply,
- * so the very first frame is correct (no flash of dark or transparent). */
-body {
-  color: hsl(var(--foreground));
-  background:
-    radial-gradient(circle at top left, hsla(250, 84%, 70%, 0.05), transparent 38%),
-    radial-gradient(circle at top right, hsla(196, 80%, 60%, 0.04), transparent 32%),
-    hsl(var(--background));
+/*
+ * Body painted with literal hex. This wins because it's the body
+ * itself; nothing can be "above" it in the layout. Tailwind's
+ * `bg-slate-100` is `#f1f5f9` — same value here.
+ *
+ * Important: html element also gets the colour so any margin/padding
+ * applied to body doesn't show a dark band at the edges.
+ */
+html, body {
+  background-color: #f1f5f9;
+  color: #0f172a;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-  /* Forces light scheme even if the browser has dark-mode preference,
-     so OS-rendered widgets (selects, date pickers) stay light too. */
   color-scheme: light;
+  min-height: 100vh;
 }
 
-/* Default border colour — Tailwind 'border' supplies the width, this
- * supplies the colour. */
+/* Soft radial wash to give the page some life — applied to body so
+   it overlays the html background. Subtle on purpose; the cards do
+   the heavy lifting visually. */
+body {
+  background-image:
+    radial-gradient(circle at top left, rgba(99, 102, 241, 0.04), transparent 38%),
+    radial-gradient(circle at top right, rgba(56, 189, 248, 0.04), transparent 32%);
+  background-attachment: fixed;
+}
+
 * {
   border-color: hsl(var(--border));
 }
 
-/* ---- Native dropdown / picker theming ---- */
 select {
   color: hsl(var(--foreground));
 }
@@ -109,7 +104,6 @@ select option:checked {
   color: hsl(var(--accent-foreground));
 }
 
-/* ---- Vibrant chip utility classes ---- */
 .chip-blue   { background: hsl(var(--chip-blue)   / 0.12); color: hsl(var(--chip-blue));   }
 .chip-green  { background: hsl(var(--chip-green)  / 0.12); color: hsl(var(--chip-green));  }
 .chip-amber  { background: hsl(var(--chip-amber)  / 0.14); color: hsl(var(--chip-amber));  }
@@ -118,9 +112,23 @@ select option:checked {
 .chip-pink   { background: hsl(var(--chip-pink)   / 0.12); color: hsl(var(--chip-pink));   }
 .chip-teal   { background: hsl(var(--chip-teal)   / 0.14); color: hsl(var(--chip-teal));   }
 
-/* ---- Card shadow (visible Monday lift) ---- */
+/*
+ * Card shadow — Round 7.1.3 strengthened beyond 7.1.2 per user
+ * feedback. The kanban columns specifically need a slightly heavier
+ * shadow to read as "raised paper" against the slate-100 page bg.
+ */
 .surface-shadow {
   box-shadow:
-    0 1px 2px rgba(15, 23, 42, 0.06),
-    0 4px 16px rgba(15, 23, 42, 0.08);
+    0 1px 3px rgba(15, 23, 42, 0.08),
+    0 8px 24px rgba(15, 23, 42, 0.10);
+}
+
+/*
+ * Kanban-specific shadow — a touch heavier still, since the columns
+ * are tall and benefit from a more pronounced depth cue.
+ */
+.kanban-shadow {
+  box-shadow:
+    0 2px 4px rgba(15, 23, 42, 0.08),
+    0 12px 32px rgba(15, 23, 42, 0.10);
 }

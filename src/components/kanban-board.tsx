@@ -81,7 +81,7 @@ export function KanbanBoard({
               <div
                 ref={provided.innerRef}
                 {...provided.droppableProps}
-                className={`rounded-2xl border min-h-[460px] flex flex-col transition-colors ${
+                className={`rounded-2xl border kanban-shadow min-h-[460px] flex flex-col transition-colors ${
                   snapshot.isDraggingOver ? 'ring-2 ring-[hsl(var(--primary))]/60' : ''
                 }`}
                 style={{ backgroundColor: column.bg }}
