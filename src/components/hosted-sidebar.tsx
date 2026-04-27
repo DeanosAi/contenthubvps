@@ -127,22 +127,31 @@ export function HostedSidebar({
           to its left is preserved — that's reserved for an eventual
           per-client logo (the user's own brand mark, when this
           becomes a multi-tenant install where a workspace might
-          render a custom logo there). The dual-icon look is
-          intentional during this build phase. */}
+          render a custom logo there).
+          
+          Round 7.7: the previous logo was the full source image
+          (kanban icon + wordmark + tagline) shrunk to fit, which
+          made the wordmark unreadably tiny. Now using a cropped-to-
+          wordmark-only version of the source image — drops the
+          built-in kanban icon (redundant with the indigo placeholder
+          square anyway) and the tagline (too small to read at
+          sidebar size). The remaining wordmark is sized h-8 to
+          match the placeholder square's height, giving a clean
+          balanced row. */}
       <div className="px-4 py-3.5 border-b border-slate-200 flex items-center gap-3">
         <div className="h-8 w-8 rounded-lg bg-indigo-100 flex items-center justify-center">
           <div className="h-4 w-4 rounded bg-indigo-600" />
         </div>
         {/* eslint-disable-next-line @next/next/no-img-element --
             using plain <img> intentionally. The logo is a tiny static
-            asset (~16 KB), the optimisation Next/Image provides
+            asset (~15 KB), the optimisation Next/Image provides
             (responsive variants, lazy loading, blur placeholder) is
             unnecessary for a branding mark that's always above the
             fold and never resizes. */}
         <img
           src="/content-hub-logo.jpg"
           alt="Content Hub"
-          className="h-7 w-auto"
+          className="h-8 w-auto"
         />
       </div>
 
