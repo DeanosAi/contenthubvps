@@ -227,44 +227,6 @@ export function SettingsShell() {
     setTimeout(() => setStatusMessage(null), 6000)
   }
 
-  /**
-   * Round 7.5: rename a user. Available to:
-   *   - admins, for any user
-   *   - any user, for themselves (the API enforces this)
-   *
-   * After saving, the cached user list (`useUsers()` hook) is
-   * invalidated so kanban cards, list-view rows, and assignee
-   * dropdowns immediately reflect the new name without a full
-   * page reload. The settings page itself reloads via `loadAll()`
-   * so the rename is reflected in the team list right away.
-   */
-  async function renameUser(user: User) {
-    const canEdit = isAdmin || user.id === me?.userId
-    if (!canEdit) return
-    const newName = prompt(
-      `Display name for ${user.email}. This is what other team members see when a job is assigned to this user. Leave blank to clear.`,
-      user.name ?? '',
-    )
-    if (newName == null) return // cancelled
-    // Empty string → null (clears the name and falls back to email everywhere)
-    const trimmed = newName.trim()
-    const payload = { name: trimmed.length === 0 ? null : trimmed }
-    const res = await fetch(`/api/users/${user.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    })
-    if (!res.ok) {
-      const j = await res.json().catch(() => ({}))
-      setErrorMessage(j?.error || 'Failed to rename user')
-      return
-    }
-    invalidateUsersCache()
-    await loadAll()
-    setStatusMessage(`Renamed ${user.email}.`)
-    setTimeout(() => setStatusMessage(null), 4000)
-  }
-
   // ---- workspace mutations (passed to sidebar) ----
   async function createWorkspace(name: string) {
     const res = await fetch('/api/workspaces', {
@@ -316,8 +278,8 @@ export function SettingsShell() {
   }
 
   return (
-    <div className="min-h-screen p-6 lg:p-8 bg-slate-100 text-slate-900">
-      <div className="grid grid-cols-[260px_minmax(0,1fr)] gap-6 max-w-[1600px] mx-auto">
+    <div className="min-h-screen p-4 lg:p-8 bg-slate-100 text-slate-900">
+      <div className="grid grid-cols-1 lg:grid-cols-[260px_minmax(0,1fr)] gap-6 max-w-[1600px] mx-auto">
         <HostedSidebar
           workspaces={workspaces}
           selectedWorkspaceId={selectedWorkspaceId}
@@ -530,7 +492,7 @@ export function SettingsShell() {
               <p className="text-xs text-[hsl(var(--muted-foreground))] mt-1">
                 {isAdmin
                   ? 'Add or remove teammates. Tell them their email + the password you set, and ask them to sign in at the login URL.'
-                  : 'Members of your team. You can rename yourself; only admins can change other settings.'}
+                  : 'Members of your team. Only admins can change this.'}
               </p>
             </div>
             <p className="text-xs text-[hsl(var(--muted-foreground))]">
@@ -560,17 +522,6 @@ export function SettingsShell() {
                       <p className="text-xs text-[hsl(var(--muted-foreground))] truncate">{u.email}</p>
                     )}
                   </div>
-                  {/* Round 7.5: Rename button shown for admins (any user)
-                      and for the current user on their own row. */}
-                  {(isAdmin || u.id === me?.userId) && (
-                    <button
-                      type="button"
-                      onClick={() => renameUser(u)}
-                      className="text-xs px-2 py-1 rounded border hover:bg-[hsl(var(--accent))]/40"
-                    >
-                      Rename
-                    </button>
-                  )}
                   {isAdmin ? (
                     <>
                       <select

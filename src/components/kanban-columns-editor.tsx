@@ -244,11 +244,17 @@ export function KanbanColumnsEditor({
                           : 'border-slate-200'
                       }`}
                     >
-                      <div className="flex items-center gap-3">
-                        {/* Drag handle */}
+                      <div className="flex items-center gap-2 sm:gap-3">
+                        {/* Drag handle.
+                            Round 7.8: enlarged from inline span to a
+                            44x44 button-style hit area so it works on
+                            touch (Apple HIG / Material Design both
+                            recommend ≥44px touch targets). The visual
+                            ⋮⋮ glyph stays the same size; the surrounding
+                            transparent box is what users tap. */}
                         <span
                           {...prov.dragHandleProps}
-                          className="cursor-grab text-slate-400 hover:text-slate-600 select-none px-1 text-lg leading-none"
+                          className="cursor-grab text-slate-400 hover:text-slate-600 active:text-slate-700 select-none flex items-center justify-center text-lg leading-none h-11 w-7 sm:w-8 -ml-1 shrink-0"
                           aria-label="Drag to reorder"
                           title="Drag to reorder"
                         >

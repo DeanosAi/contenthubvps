@@ -82,6 +82,21 @@ export function HostedSidebar({
   const [editingName, setEditingName] = useState('')
   const [settingsForId, setSettingsForId] = useState<string>('')
   const [createOpen, setCreateOpen] = useState(false)
+  /** Round 7.8 — mobile drawer state. The sidebar is always present
+   *  in the DOM; on mobile (<lg breakpoint) it's hidden off-canvas
+   *  via a -translate-x-full transform. Tapping the hamburger button
+   *  in the mobile top bar flips this to true; tapping a nav item
+   *  or the scrim flips it back to false. On desktop the lg:
+   *  variants override the transform so the sidebar is always
+   *  visible regardless of this state — the state is effectively
+   *  a no-op on desktop. */
+  const [mobileOpen, setMobileOpen] = useState(false)
+
+  /** Close drawer when a nav link is selected (mobile UX —
+   *  otherwise the drawer would stay open over the just-loaded page). */
+  function closeMobileDrawer() {
+    setMobileOpen(false)
+  }
 
   function startEdit(workspace: Workspace) {
     setEditingId(workspace.id)
@@ -120,7 +135,73 @@ export function HostedSidebar({
   }
 
   return (
-    <aside className="rounded-2xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.06),0_4px_16px_rgba(15,23,42,0.08)] flex flex-col self-start overflow-hidden">
+    <>
+      {/* Round 7.8 — mobile top bar.
+          Visible only on <lg viewports. Renders the logo + a
+          hamburger button. Tapping the button opens the drawer
+          (which is the existing sidebar transformed into an
+          off-canvas slide-in). On desktop this whole bar is
+          display:none — the sidebar is always visible inline. */}
+      <div className="lg:hidden col-span-full flex items-center justify-between gap-3 px-4 py-3 rounded-2xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.06),0_4px_16px_rgba(15,23,42,0.08)]">
+        <div className="flex items-center gap-3">
+          <div className="h-8 w-8 rounded-lg bg-indigo-100 flex items-center justify-center shrink-0">
+            <div className="h-4 w-4 rounded bg-indigo-600" />
+          </div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/content-hub-logo.jpg"
+            alt="Content Hub"
+            className="h-7 w-auto"
+          />
+        </div>
+        <button
+          type="button"
+          onClick={() => setMobileOpen(true)}
+          aria-label="Open menu"
+          className="h-11 w-11 rounded-lg flex items-center justify-center text-slate-700 hover:bg-slate-100 active:bg-slate-200 transition-colors"
+        >
+          {/* Hamburger icon — three stacked bars built from spans so
+              we don't need an icon library. The 11x11 button is
+              well above the 44px minimum touch target. */}
+          <span className="flex flex-col gap-1.5" aria-hidden="true">
+            <span className="block h-0.5 w-5 bg-slate-700 rounded" />
+            <span className="block h-0.5 w-5 bg-slate-700 rounded" />
+            <span className="block h-0.5 w-5 bg-slate-700 rounded" />
+          </span>
+        </button>
+      </div>
+
+      {/* Round 7.8 — mobile drawer scrim.
+          Dark translucent overlay behind the drawer when open.
+          Tapping it dismisses the drawer. Hidden on lg+ (desktop
+          doesn't have a drawer concept).
+          
+          z-index plan:
+            z-40: scrim
+            z-50: drawer (the aside, when in mobile mode)
+            z-50: dialogs (which we've lifted out of the aside —
+                  see below — so they don't get clipped by the
+                  drawer's transform). Dialogs win because they
+                  render LATER in DOM order. */}
+      {mobileOpen && (
+        <div
+          className="lg:hidden fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-sm"
+          onClick={closeMobileDrawer}
+          aria-hidden="true"
+        />
+      )}
+
+      <aside
+        className={`
+          flex flex-col bg-white border border-slate-200
+          shadow-[0_1px_2px_rgba(15,23,42,0.06),0_4px_16px_rgba(15,23,42,0.08)]
+          overflow-hidden
+          transition-transform duration-200 ease-out
+          fixed inset-y-0 left-0 z-50 w-72 max-w-[85vw] rounded-r-2xl
+          lg:rounded-2xl lg:self-start lg:translate-x-0 lg:relative lg:z-auto lg:w-auto lg:max-w-none lg:inset-auto
+          ${mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+        `}
+      >
       {/* Branding row.
           Round 7.6: replaced the "Content Hub" h1 wordmark with a
           PNG/JPEG logo file. The small indigo-square placeholder
@@ -158,10 +239,10 @@ export function HostedSidebar({
       {/* Page navigation */}
       <div className="p-3 border-b border-slate-200">
         <nav className="space-y-0.5 text-sm">
-          <SidebarLink href="/app" label="Dashboard" pathname={pathname} matchPrefix="/app" />
-          <SidebarLink href="/calendar" label="Calendar" pathname={pathname} matchPrefix="/calendar" />
-          <SidebarLink href="/reports" label="Reports" pathname={pathname} matchPrefix="/reports" />
-          <SidebarLink href="/settings" label="Settings" pathname={pathname} matchPrefix="/settings" />
+          <SidebarLink href="/app" label="Dashboard" pathname={pathname} matchPrefix="/app" onClick={closeMobileDrawer} />
+          <SidebarLink href="/calendar" label="Calendar" pathname={pathname} matchPrefix="/calendar" onClick={closeMobileDrawer} />
+          <SidebarLink href="/reports" label="Reports" pathname={pathname} matchPrefix="/reports" onClick={closeMobileDrawer} />
+          <SidebarLink href="/settings" label="Settings" pathname={pathname} matchPrefix="/settings" onClick={closeMobileDrawer} />
         </nav>
       </div>
 
@@ -236,7 +317,10 @@ export function HostedSidebar({
                                   drag. */}
                               <div
                                 {...prov.dragHandleProps}
-                                onClick={() => onSelectWorkspace(workspace.id)}
+                                onClick={() => {
+                                  onSelectWorkspace(workspace.id)
+                                  closeMobileDrawer()
+                                }}
                                 className="flex-1 flex items-center gap-2 px-2 py-1.5 cursor-pointer min-w-0"
                               >
                                 <span
@@ -304,7 +388,16 @@ export function HostedSidebar({
           )}
         </div>
       </div>
+      </aside>
 
+      {/* Round 7.8 — dialogs lifted out of the <aside> element.
+          The aside has a CSS transform on mobile (translate-x for
+          drawer behaviour). A transformed element creates a new
+          containing block for any fixed-position descendants, which
+          would cause these modal dialogs to render relative to the
+          (off-canvas) aside instead of the viewport. By rendering
+          them as fragment-siblings of the aside they always escape
+          to the viewport via their own position:fixed. */}
       {/* Round 6.4 workspace settings dialog */}
       {settingsForId && (() => {
         const ws = workspaces.find((w) => w.id === settingsForId)
@@ -332,7 +425,7 @@ export function HostedSidebar({
           }}
         />
       )}
-    </aside>
+    </>
   )
 }
 
@@ -343,11 +436,17 @@ function SidebarLink({
   label,
   pathname,
   matchPrefix,
+  onClick,
 }: {
   href: string
   label: string
   pathname: string | null
   matchPrefix: string
+  /** Round 7.8: optional click handler. The sidebar passes a
+   *  function that closes the mobile drawer; on desktop this is
+   *  still provided but has no visible effect (the drawer state
+   *  is controlled but not rendered there). */
+  onClick?: () => void
 }) {
   const isActive =
     pathname === matchPrefix ||
@@ -355,6 +454,7 @@ function SidebarLink({
   return (
     <Link
       href={href}
+      onClick={onClick}
       className={`block rounded-md px-3 py-2 transition-colors ${
         isActive
           ? 'bg-indigo-50 text-indigo-700 font-medium'
