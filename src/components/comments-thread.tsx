@@ -66,6 +66,25 @@ function formatTimestamp(iso: string): string {
   })
 }
 
+/**
+ * Auto-grow helper for the comment textareas — round 7.10 polish.
+ *
+ * Resets height to auto first so scrollHeight measures the natural
+ * content height (otherwise a textarea that's been sized larger
+ * than its content keeps that taller height forever). Then sets
+ * height to scrollHeight, capped at 240px so very long drafts don't
+ * push the rest of the detail panel offscreen.
+ *
+ * The textareas keep `resize-y` so users can still drag the corner
+ * handle for explicit control if they want; this just handles the
+ * common case of "I'm typing, please grow with me."
+ */
+function autoGrowTextarea(el: HTMLTextAreaElement) {
+  const cap = 240
+  el.style.height = 'auto'
+  el.style.height = Math.min(el.scrollHeight, cap) + 'px'
+}
+
 export function CommentsThread({ jobId }: { jobId: string }) {
   const [me, setMe] = useState<SessionMe>(null)
   const [comments, setComments] = useState<JobComment[]>([])
@@ -139,9 +158,13 @@ export function CommentsThread({ jobId }: { jobId: string }) {
       const created = (await res.json()) as JobComment
       setComments((cs) => [...cs, created])
       setDraft('')
-      // After posting, blur the textarea so a tiny mobile keyboard
-      // doesn't keep covering the new comment.
-      composerRef.current?.blur()
+      // After posting, reset the auto-grown height back to baseline
+      // and blur the textarea so a mobile keyboard doesn't keep
+      // covering the new comment.
+      if (composerRef.current) {
+        composerRef.current.style.height = ''
+        composerRef.current.blur()
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Post failed')
     } finally {
@@ -168,7 +191,13 @@ export function CommentsThread({ jobId }: { jobId: string }) {
         setError(data?.error ?? `Edit failed (${res.status})`)
         return
       }
-      const updated = (await res.json()) as JobComment
+      // Round 7.10 polish: the PATCH endpoint returns {ok, comment}
+      // — not the raw comment as POST/list do. Unwrap before splicing
+      // into state, otherwise we'd replace the row with the wrapper
+      // object and lose all the comment fields. (POST and the list
+      // endpoint return raw JobComment, so they're not affected.)
+      const data = (await res.json()) as { ok: boolean; comment: JobComment }
+      const updated = data.comment
       setComments((cs) => cs.map((c) => (c.id === commentId ? updated : c)))
       setEditingId(null)
       setEditDraft('')
@@ -218,6 +247,7 @@ export function CommentsThread({ jobId }: { jobId: string }) {
           ref={composerRef}
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
+          onInput={(e) => autoGrowTextarea(e.currentTarget)}
           onKeyDown={(e) => {
             // Cmd/Ctrl-Enter to submit. Plain Enter inserts a newline
             // because comments often span multiple lines.
@@ -229,7 +259,7 @@ export function CommentsThread({ jobId }: { jobId: string }) {
           placeholder="Add a comment…"
           rows={2}
           maxLength={5000}
-          className="w-full px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none resize-y min-h-[60px]"
+          className="w-full px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none resize-y min-h-[60px] max-h-[240px]"
           disabled={posting}
         />
         <div className="flex items-center justify-between px-3 py-2 border-t border-slate-200 bg-slate-50">
@@ -370,6 +400,7 @@ export function CommentsThread({ jobId }: { jobId: string }) {
                       <textarea
                         value={editDraft}
                         onChange={(e) => setEditDraft(e.target.value)}
+                        onInput={(e) => autoGrowTextarea(e.currentTarget)}
                         onKeyDown={(e) => {
                           if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
                             e.preventDefault()
@@ -380,9 +411,15 @@ export function CommentsThread({ jobId }: { jobId: string }) {
                             setEditDraft('')
                           }
                         }}
+                        ref={(el) => {
+                          // Auto-grow on initial mount so a long
+                          // existing comment is fully visible when
+                          // edit opens, not chopped at 3 rows.
+                          if (el) autoGrowTextarea(el)
+                        }}
                         rows={3}
                         maxLength={5000}
-                        className="w-full px-3 py-2 text-sm text-slate-900 focus:outline-none resize-y min-h-[60px]"
+                        className="w-full px-3 py-2 text-sm text-slate-900 focus:outline-none resize-y min-h-[60px] max-h-[240px]"
                         disabled={editSaving}
                         autoFocus
                       />
