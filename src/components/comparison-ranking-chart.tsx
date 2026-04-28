@@ -47,8 +47,8 @@ export function ComparisonRankingChart({ posts }: { posts: ComparisonPost[] }) {
 
   if (data.length === 0) {
     return (
-      <div className="rounded-2xl border bg-[hsl(var(--card))] p-10 text-center">
-        <p className="text-sm text-[hsl(var(--muted-foreground))]">
+      <div className="rounded-2xl border bg-white surface-shadow p-10 text-center">
+        <p className="text-sm text-slate-600">
           No metric-bearing posts to rank yet.
         </p>
       </div>
@@ -59,13 +59,13 @@ export function ComparisonRankingChart({ posts }: { posts: ComparisonPost[] }) {
   const height = Math.min(640, 60 + data.length * 32)
 
   return (
-    <div className="rounded-2xl border bg-[hsl(var(--card))] p-4">
+    <div className="rounded-2xl border bg-white surface-shadow p-4">
       <div className="mb-3">
         <h3 className="text-sm font-semibold">Ranking by engagement</h3>
-        <p className="text-xs text-[hsl(var(--muted-foreground))] mt-0.5">
+        <p className="text-xs text-slate-600 mt-0.5">
           Posts in this set, sorted by total engagement actions.
           {data.length < posts.length && (
-            <span className="text-amber-300 ml-1">
+            <span className="text-amber-700 ml-1">
               {posts.length - data.length} post(s) without metrics omitted.
             </span>
           )}
@@ -77,10 +77,21 @@ export function ComparisonRankingChart({ posts }: { posts: ComparisonPost[] }) {
           layout="vertical"
           margin={{ top: 8, right: 24, left: 8, bottom: 0 }}
         >
-          <CartesianGrid stroke="hsl(var(--border))" strokeDasharray="3 3" horizontal={false} />
+          {/* Round 7.9: chart colours hardcoded to literal hex/rgba.
+              Same reasoning as reports-charts.tsx and reports-deep-
+              dive-monthly.tsx — recharts inlines stroke/fill into
+              SVG attributes at render, so a hardcoded fallback is
+              more robust than CSS-var indirection that could fail
+              if globals.css ever changes. Palette matches:
+                grid:      #e2e8f0 (slate-200)
+                axis:      #64748b (slate-500)
+                primary:   #4f46e5 (indigo-600), and rgba 45% alpha
+                           for non-winning bars
+                tooltip:   white card, slate-200 border, slate-900 text */}
+          <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" horizontal={false} />
           <XAxis
             type="number"
-            stroke="hsl(var(--muted-foreground))"
+            stroke="#64748b"
             fontSize={11}
             tickLine={false}
             axisLine={false}
@@ -89,7 +100,7 @@ export function ComparisonRankingChart({ posts }: { posts: ComparisonPost[] }) {
           <YAxis
             dataKey="label"
             type="category"
-            stroke="hsl(var(--muted-foreground))"
+            stroke="#64748b"
             fontSize={11}
             tickLine={false}
             axisLine={false}
@@ -98,12 +109,13 @@ export function ComparisonRankingChart({ posts }: { posts: ComparisonPost[] }) {
           />
           <Tooltip
             contentStyle={{
-              backgroundColor: 'hsl(var(--card))',
-              border: '1px solid hsl(var(--border))',
+              backgroundColor: '#ffffff',
+              border: '1px solid #e2e8f0',
               borderRadius: 8,
               fontSize: 12,
+              color: '#0f172a',
             }}
-            cursor={{ fill: 'hsl(var(--accent) / 0.3)' }}
+            cursor={{ fill: 'rgba(79, 70, 229, 0.08)' }}
             formatter={(value: unknown) => {
               const n = typeof value === 'number' ? value : Number(value ?? 0)
               return [Number.isFinite(n) ? n.toLocaleString() : '—', 'Engagement']
@@ -113,7 +125,7 @@ export function ComparisonRankingChart({ posts }: { posts: ComparisonPost[] }) {
             {data.map((_, idx) => (
               <Cell
                 key={idx}
-                fill={idx === 0 ? 'hsl(var(--primary))' : 'hsl(var(--primary) / 0.45)'}
+                fill={idx === 0 ? '#4f46e5' : 'rgba(79, 70, 229, 0.45)'}
               />
             ))}
           </Bar>

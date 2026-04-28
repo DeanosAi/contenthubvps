@@ -101,17 +101,17 @@ export function ComparisonPostPicker({
   const atCap = selectedIds.length >= SOFT_CAP
 
   return (
-    <div className="rounded-2xl border bg-[hsl(var(--card))] overflow-hidden">
+    <div className="rounded-2xl border bg-white surface-shadow overflow-hidden">
       {/* Header: count + actions + sort */}
-      <div className="flex items-center justify-between gap-3 flex-wrap p-3 border-b border-[hsl(var(--border))]">
+      <div className="flex items-center justify-between gap-3 flex-wrap p-3 border-b border-slate-300">
         <div className="flex items-center gap-3 flex-wrap">
           <p className="text-sm">
             <span className="font-semibold">{selectedIds.length}</span>{' '}
-            <span className="text-[hsl(var(--muted-foreground))]">
+            <span className="text-slate-600">
               of up to {SOFT_CAP} selected
             </span>
             {atCap && (
-              <span className="ml-2 text-[10px] uppercase tracking-wider text-amber-300">
+              <span className="ml-2 text-[10px] uppercase tracking-wider text-amber-700">
                 cap reached
               </span>
             )}
@@ -120,7 +120,7 @@ export function ComparisonPostPicker({
             <button
               type="button"
               onClick={clear}
-              className="text-xs underline text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]"
+              className="text-xs underline text-slate-600 hover:text-slate-900"
             >
               Clear
             </button>
@@ -132,7 +132,7 @@ export function ComparisonPostPicker({
             type="button"
             onClick={() => selectTopN(10)}
             disabled={eligible.length === 0}
-            className="rounded-lg border border-[hsl(var(--border))] px-3 py-1.5 text-xs hover:bg-[hsl(var(--accent))]/40 disabled:opacity-50"
+            className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs hover:bg-indigo-50/40 disabled:opacity-50"
             title="Replace selection with the 10 highest-engagement posts in this workspace"
           >
             Top 10 by engagement
@@ -165,13 +165,13 @@ export function ComparisonPostPicker({
 
       {/* Post list */}
       {visible.length === 0 ? (
-        <div className="p-10 text-center text-sm text-[hsl(var(--muted-foreground))]">
+        <div className="p-10 text-center text-sm text-slate-600">
           {eligible.length === 0
             ? 'No posted or archived posts in this workspace yet.'
             : 'No posts match the current campaign filter.'}
         </div>
       ) : (
-        <ul className="max-h-[28rem] overflow-y-auto divide-y divide-[hsl(var(--border))]">
+        <ul className="max-h-[28rem] overflow-y-auto divide-y divide-slate-200">
           {visible.map((j) => {
             const checked = selectedSet.has(j.id)
             const eng = engagementOf(j)
@@ -181,8 +181,8 @@ export function ComparisonPostPicker({
                 key={j.id}
                 className={`flex items-center gap-3 p-3 cursor-pointer transition-colors ${
                   checked
-                    ? 'bg-[hsl(var(--primary))]/10'
-                    : 'hover:bg-[hsl(var(--accent))]/30'
+                    ? 'bg-indigo-600/10'
+                    : 'hover:bg-indigo-50/30'
                 } ${!checked && atCap ? 'opacity-60' : ''}`}
                 onClick={() => toggle(j.id)}
               >
@@ -198,17 +198,17 @@ export function ComparisonPostPicker({
                   <p className="text-sm font-medium truncate">
                     {j.title}
                     {j.stage === 'archive' && (
-                      <span className="ml-2 text-[10px] uppercase tracking-wider text-[hsl(var(--muted-foreground))]">
+                      <span className="ml-2 text-[10px] uppercase tracking-wider text-slate-600">
                         archived
                       </span>
                     )}
                   </p>
-                  <div className="flex items-center gap-3 flex-wrap text-xs text-[hsl(var(--muted-foreground))] mt-0.5">
+                  <div className="flex items-center gap-3 flex-wrap text-xs text-slate-600 mt-0.5">
                     {j.postedAt && <span>{formatPostedDate(j.postedAt)}</span>}
                     {j.platform && <span className="capitalize">{j.platform}</span>}
                     {j.contentType && <span>{j.contentType}</span>}
                     {j.campaign && (
-                      <span className="rounded-full bg-[hsl(var(--primary))]/10 text-[hsl(var(--primary))] px-1.5 py-0.5">
+                      <span className="rounded-full bg-indigo-600/10 text-indigo-700 px-1.5 py-0.5">
                         {j.campaign}
                       </span>
                     )}
@@ -218,7 +218,7 @@ export function ComparisonPostPicker({
                   <p className="text-sm font-semibold">
                     {hasMetrics ? eng.toLocaleString() : '—'}
                   </p>
-                  <p className="text-[10px] uppercase tracking-wider text-[hsl(var(--muted-foreground))]">
+                  <p className="text-[10px] uppercase tracking-wider text-slate-600">
                     {hasMetrics ? 'engagement' : 'no metrics'}
                   </p>
                 </div>

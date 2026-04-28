@@ -17,10 +17,10 @@ export function ComparisonModeToggle({
 }) {
   return (
     <div className="flex items-center gap-3">
-      <span className="text-xs uppercase tracking-wider text-[hsl(var(--muted-foreground))]">
+      <span className="text-xs uppercase tracking-wider text-slate-600">
         Selection
       </span>
-      <div className="inline-flex items-center rounded-lg border border-[hsl(var(--border))] p-0.5 bg-[hsl(var(--card))]">
+      <div className="inline-flex items-center rounded-lg border border-slate-300 p-0.5 bg-white surface-shadow">
         {(
           [
             { value: 'manual', label: 'Pick posts manually' },
@@ -33,8 +33,8 @@ export function ComparisonModeToggle({
             onClick={() => onChange(opt.value)}
             className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
               mode === opt.value
-                ? 'bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]'
-                : 'text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]'
+                ? 'bg-indigo-600 text-white'
+                : 'text-slate-600 hover:text-slate-900'
             }`}
           >
             {opt.label}

@@ -71,31 +71,31 @@ export function ComparisonCampaignPicker({
   }, [workspaceId])
 
   return (
-    <div className="rounded-2xl border bg-[hsl(var(--card))] p-4 space-y-4">
+    <div className="rounded-2xl border bg-white surface-shadow p-4 space-y-4">
       <div>
         <h3 className="text-sm font-semibold">By campaign</h3>
-        <p className="text-xs text-[hsl(var(--muted-foreground))] mt-1">
+        <p className="text-xs text-slate-600 mt-1">
           Pick a campaign tag from this workspace. Posts in <code>posted</code>{' '}
           and <code>archive</code> stages with that tag will be compared.
         </p>
       </div>
 
       {!workspaceId ? (
-        <p className="text-xs text-[hsl(var(--muted-foreground))]">
+        <p className="text-xs text-slate-600">
           Pick a workspace above to see its campaigns.
         </p>
       ) : campaignsLoading ? (
-        <p className="text-xs text-[hsl(var(--muted-foreground))]">
+        <p className="text-xs text-slate-600">
           Loading campaigns…
         </p>
       ) : campaigns.length === 0 ? (
-        <p className="text-xs text-[hsl(var(--muted-foreground))]">
+        <p className="text-xs text-slate-600">
           No campaigns tagged in this workspace yet. Tag posts with a campaign
           name in their detail panel to use this mode.
         </p>
       ) : (
         <div className="grid md:grid-cols-2 gap-3">
-          <label className="flex flex-col gap-1 text-xs text-[hsl(var(--muted-foreground))]">
+          <label className="flex flex-col gap-1 text-xs text-slate-600">
             Campaign
             <select
               className="rounded-lg border bg-transparent px-3 py-2 text-sm"
@@ -113,7 +113,7 @@ export function ComparisonCampaignPicker({
             </select>
           </label>
 
-          <label className="flex flex-col gap-1 text-xs text-[hsl(var(--muted-foreground))]">
+          <label className="flex flex-col gap-1 text-xs text-slate-600">
             Date scope
             <div className="flex items-center gap-2 mt-1">
               <input
@@ -127,12 +127,12 @@ export function ComparisonCampaignPicker({
               />
               <label
                 htmlFor="full-campaign-toggle"
-                className="text-sm text-[hsl(var(--foreground))] select-none cursor-pointer"
+                className="text-sm text-slate-900 select-none cursor-pointer"
               >
                 Full campaign (ignore date range)
               </label>
             </div>
-            <p className="text-[11px] text-[hsl(var(--muted-foreground))] mt-1">
+            <p className="text-[11px] text-slate-600 mt-1">
               {fullCampaign
                 ? 'Date range is being ignored. Every post with this campaign tag will be included.'
                 : fromIso && toIso
@@ -145,18 +145,18 @@ export function ComparisonCampaignPicker({
 
       {/* Status line */}
       {campaign && (
-        <div className="text-xs text-[hsl(var(--muted-foreground))] pt-2 border-t border-[hsl(var(--border))]">
+        <div className="text-xs text-slate-600 pt-2 border-t border-slate-300">
           {loading ? (
             'Loading campaign posts…'
           ) : resultCount == null ? (
             ' '
           ) : resultCount === 0 ? (
-            <span className="text-amber-300">
+            <span className="text-amber-700">
               No posts found matching this campaign and scope.
             </span>
           ) : (
             <>
-              <span className="font-semibold text-[hsl(var(--foreground))]">
+              <span className="font-semibold text-slate-900">
                 {resultCount}
               </span>{' '}
               {resultCount === 1 ? 'post' : 'posts'} match. Comparison is

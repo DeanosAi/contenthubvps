@@ -241,7 +241,7 @@ export function ComparisonShell({
           type="button"
           onClick={downloadPdf}
           disabled={pdfBusy || !enoughPosts}
-          className="rounded-lg bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] font-semibold px-4 py-2 text-sm disabled:opacity-50"
+          className="rounded-lg bg-indigo-600 text-white font-semibold px-4 py-2 text-sm disabled:opacity-50"
           title={
             enoughPosts
               ? 'Download a PDF of this comparison'
@@ -254,7 +254,7 @@ export function ComparisonShell({
 
       {/* Workspace gate */}
       {!workspaceId ? (
-        <div className="rounded-2xl border bg-[hsl(var(--card))] p-10 text-center text-sm text-[hsl(var(--muted-foreground))]">
+        <div className="rounded-2xl border bg-white surface-shadow p-10 text-center text-sm text-slate-600">
           Pick a workspace in the filter bar above to start comparing posts.
         </div>
       ) : mode === 'manual' ? (
@@ -279,7 +279,7 @@ export function ComparisonShell({
             resultCount={campaignResultCount}
           />
           {campaignError && (
-            <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+            <div className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">
               {campaignError}
             </div>
           )}
@@ -288,7 +288,7 @@ export function ComparisonShell({
 
       {/* Comparison output */}
       {tooFewPosts && (
-        <div className="rounded-2xl border bg-[hsl(var(--card))] p-10 text-center text-sm text-[hsl(var(--muted-foreground))]">
+        <div className="rounded-2xl border bg-white surface-shadow p-10 text-center text-sm text-slate-600">
           Pick at least {MIN_POSTS} posts to compare. A comparison of one post
           against itself isn&apos;t meaningful.
         </div>
@@ -299,17 +299,17 @@ export function ComparisonShell({
           <ComparisonRankingChart posts={report.posts} />
 
           <section className="space-y-2">
-            <h3 className="text-sm font-semibold uppercase tracking-wider text-[hsl(var(--muted-foreground))]">
+            <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-600">
               Side-by-side
             </h3>
             <ComparisonTable posts={report.posts} />
           </section>
 
           <section className="space-y-2">
-            <h3 className="text-sm font-semibold uppercase tracking-wider text-[hsl(var(--muted-foreground))]">
+            <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-600">
               Observations
               {insights.length > 0 && (
-                <span className="ml-1 text-[hsl(var(--muted-foreground))] font-normal normal-case tracking-normal">
+                <span className="ml-1 text-slate-600 font-normal normal-case tracking-normal">
                   ({insights.length} triggered)
                 </span>
               )}

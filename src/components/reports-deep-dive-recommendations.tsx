@@ -37,8 +37,8 @@ export function ReportsDeepDiveRecommendations({
 }) {
   if (recommendations.length === 0) {
     return (
-      <div className="rounded-2xl border bg-[hsl(var(--card))] p-10 text-center">
-        <p className="text-sm text-[hsl(var(--muted-foreground))]">
+      <div className="rounded-2xl border bg-white surface-shadow p-10 text-center">
+        <p className="text-sm text-slate-600">
           No recommendations triggered for this period — your numbers look stable.
         </p>
       </div>
@@ -51,18 +51,18 @@ export function ReportsDeepDiveRecommendations({
         return (
           <div
             key={r.id}
-            className={`rounded-2xl border bg-[hsl(var(--card))] p-4 ring-1 ${s.ring}`}
+            className={`rounded-2xl border bg-white surface-shadow p-4 ring-1 ${s.ring}`}
           >
             <div className="flex items-start gap-3">
               <span className={`mt-1.5 h-2.5 w-2.5 rounded-full shrink-0 ${s.dot}`} />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <h4 className="text-sm font-semibold">{r.title}</h4>
-                  <span className="text-[10px] uppercase tracking-wider text-[hsl(var(--muted-foreground))]">
+                  <span className="text-[10px] uppercase tracking-wider text-slate-600">
                     {s.label}
                   </span>
                 </div>
-                <p className="mt-1.5 text-sm text-[hsl(var(--muted-foreground))] leading-relaxed">
+                <p className="mt-1.5 text-sm text-slate-600 leading-relaxed">
                   {r.body}
                 </p>
               </div>

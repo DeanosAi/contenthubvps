@@ -10,17 +10,17 @@ import { formatNumber, formatEngagementRate } from '@/lib/reports'
 export function ReportsDeepDivePlatformTable({ rows }: { rows: PlatformTrendRow[] }) {
   if (rows.length === 0) {
     return (
-      <div className="rounded-2xl border bg-[hsl(var(--card))] p-10 text-center">
-        <p className="text-sm text-[hsl(var(--muted-foreground))]">
+      <div className="rounded-2xl border bg-white surface-shadow p-10 text-center">
+        <p className="text-sm text-slate-600">
           No posts in this range yet.
         </p>
       </div>
     )
   }
   return (
-    <div className="rounded-2xl border bg-[hsl(var(--card))] overflow-x-auto">
+    <div className="rounded-2xl border bg-white surface-shadow overflow-x-auto">
       <table className="w-full text-sm">
-        <thead className="text-xs uppercase tracking-wider text-[hsl(var(--muted-foreground))] border-b">
+        <thead className="text-xs uppercase tracking-wider text-slate-600 border-b">
           <tr>
             <th className="text-left px-4 py-3 font-medium">Platform</th>
             <th className="text-right px-4 py-3 font-medium">Posts</th>
@@ -34,13 +34,13 @@ export function ReportsDeepDivePlatformTable({ rows }: { rows: PlatformTrendRow[
             <tr
               key={r.platform}
               className={`border-b last:border-b-0 ${
-                r.current.postsCount === 0 ? 'opacity-60' : 'hover:bg-[hsl(var(--accent))]/30'
+                r.current.postsCount === 0 ? 'opacity-60' : 'hover:bg-indigo-50/30'
               } transition-colors`}
             >
               <td className="px-4 py-3 font-medium capitalize">
                 {r.platform}
                 {r.current.postsCount === 0 && (
-                  <span className="ml-2 text-[10px] uppercase tracking-wider text-red-300">
+                  <span className="ml-2 text-[10px] uppercase tracking-wider text-red-700">
                     silent
                   </span>
                 )}
@@ -63,7 +63,7 @@ export function ReportsDeepDivePlatformTable({ rows }: { rows: PlatformTrendRow[
 function Cell({ value, delta }: { value: string; delta: TrendDelta }) {
   return (
     <td className="px-4 py-3 text-right">
-      <div className="text-[hsl(var(--foreground))]">{value}</div>
+      <div className="text-slate-900">{value}</div>
       <div className="mt-0.5">
         <DirectionPill delta={delta} />
       </div>
@@ -74,15 +74,15 @@ function Cell({ value, delta }: { value: string; delta: TrendDelta }) {
 function DirectionPill({ delta }: { delta: TrendDelta }) {
   if (delta.pctChange == null) {
     return (
-      <span className="text-[10px] text-[hsl(var(--muted-foreground))]">—</span>
+      <span className="text-[10px] text-slate-600">—</span>
     )
   }
   const colorClass =
     delta.direction === 'up'
-      ? 'text-emerald-300'
+      ? 'text-emerald-700'
       : delta.direction === 'down'
-      ? 'text-red-300'
-      : 'text-[hsl(var(--muted-foreground))]'
+      ? 'text-red-700'
+      : 'text-slate-600'
   return (
     <span className={`inline-flex items-center gap-1 text-[10px] ${colorClass}`}>
       <span>{directionGlyph(delta.direction)}</span>

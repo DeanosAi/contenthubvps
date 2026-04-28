@@ -50,16 +50,16 @@ export function ComparisonTable({ posts }: { posts: ComparisonPost[] }) {
 
   if (posts.length === 0) {
     return (
-      <div className="rounded-2xl border bg-[hsl(var(--card))] p-10 text-center text-sm text-[hsl(var(--muted-foreground))]">
+      <div className="rounded-2xl border bg-white surface-shadow p-10 text-center text-sm text-slate-600">
         No posts to compare yet.
       </div>
     )
   }
 
   return (
-    <div className="rounded-2xl border bg-[hsl(var(--card))] overflow-x-auto">
+    <div className="rounded-2xl border bg-white surface-shadow overflow-x-auto">
       <table className="w-full text-sm">
-        <thead className="text-xs uppercase tracking-wider text-[hsl(var(--muted-foreground))] border-b">
+        <thead className="text-xs uppercase tracking-wider text-slate-600 border-b">
           <tr>
             <th className="text-left px-4 py-3 font-medium">Rank</th>
             <th className="text-left px-4 py-3 font-medium">Post</th>
@@ -101,26 +101,26 @@ export function ComparisonTable({ posts }: { posts: ComparisonPost[] }) {
           {sorted.map((p, idx) => (
             <tr
               key={p.job.id}
-              className="border-b last:border-b-0 hover:bg-[hsl(var(--accent))]/30"
+              className="border-b last:border-b-0 hover:bg-indigo-50/30"
             >
-              <td className="px-4 py-3 text-[hsl(var(--muted-foreground))] tabular-nums">
+              <td className="px-4 py-3 text-slate-600 tabular-nums">
                 {idx + 1}
               </td>
               <td className="px-4 py-3 max-w-md">
                 <div className="font-medium truncate">{p.job.title}</div>
-                <div className="flex items-center gap-2 text-xs text-[hsl(var(--muted-foreground))] mt-0.5">
+                <div className="flex items-center gap-2 text-xs text-slate-600 mt-0.5">
                   {p.job.contentType && <span>{p.job.contentType}</span>}
                   {p.job.campaign && (
-                    <span className="rounded-full bg-[hsl(var(--primary))]/10 text-[hsl(var(--primary))] px-1.5 py-0.5">
+                    <span className="rounded-full bg-indigo-600/10 text-indigo-700 px-1.5 py-0.5">
                       {p.job.campaign}
                     </span>
                   )}
                   {!p.hasMetrics && (
-                    <span className="text-amber-300">no metrics yet</span>
+                    <span className="text-amber-700">no metrics yet</span>
                   )}
                 </div>
               </td>
-              <td className="px-4 py-3 text-[hsl(var(--muted-foreground))] whitespace-nowrap">
+              <td className="px-4 py-3 text-slate-600 whitespace-nowrap">
                 {formatDate(p.job.postedAt)}
               </td>
               <td className="px-4 py-3 capitalize">
@@ -167,8 +167,8 @@ function SortableTh({
         type="button"
         onClick={() => onClick(col)}
         className={`inline-flex items-center gap-1 ${
-          active ? 'text-[hsl(var(--foreground))]' : 'text-[hsl(var(--muted-foreground))]'
-        } hover:text-[hsl(var(--foreground))]`}
+          active ? 'text-slate-900' : 'text-slate-600'
+        } hover:text-slate-900`}
       >
         <span>{label}</span>
         {active && (

@@ -49,15 +49,15 @@ export function ReportsDeepDiveSummary({ deepDive }: { deepDive: DeepDive }) {
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
       {tiles.map((t) => (
-        <div key={t.label} className="rounded-2xl border bg-[hsl(var(--card))] p-4">
-          <p className="text-xs uppercase tracking-wider text-[hsl(var(--muted-foreground))]">
+        <div key={t.label} className="rounded-2xl border bg-white surface-shadow p-4">
+          <p className="text-xs uppercase tracking-wider text-slate-600">
             {t.label}
           </p>
           <p className="mt-2 text-3xl font-bold">{t.value}</p>
           <div className="mt-2 flex items-center gap-1.5 text-[11px]">
             <DirectionPill delta={t.delta} />
             {t.subline && (
-              <span className="text-[hsl(var(--muted-foreground))]">{t.subline}</span>
+              <span className="text-slate-600">{t.subline}</span>
             )}
           </div>
         </div>
@@ -68,14 +68,14 @@ export function ReportsDeepDiveSummary({ deepDive }: { deepDive: DeepDive }) {
 
 function DirectionPill({ delta }: { delta: TrendDelta }) {
   if (delta.pctChange == null) {
-    return <span className="text-[hsl(var(--muted-foreground))]">—</span>
+    return <span className="text-slate-600">—</span>
   }
   const colorClass =
     delta.direction === 'up'
-      ? 'text-emerald-300 bg-emerald-500/10'
+      ? 'text-emerald-700 bg-emerald-500/10'
       : delta.direction === 'down'
-      ? 'text-red-300 bg-red-500/10'
-      : 'text-[hsl(var(--muted-foreground))] bg-[hsl(var(--accent))]/40'
+      ? 'text-red-700 bg-red-50'
+      : 'text-slate-600 bg-indigo-50/40'
   return (
     <span
       className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-semibold ${colorClass}`}
