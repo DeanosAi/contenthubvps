@@ -6,6 +6,7 @@ import { useUsers } from '@/lib/use-users'
 import { AssetLinksEditor } from './asset-links-editor'
 import { CustomFieldsEditor } from './custom-fields-editor'
 import { CampaignField } from './campaign-field'
+import { CommentsThread } from './comments-thread'
 
 const APPROVALS: { value: ApprovalStatus; label: string; tone: string }[] = [
   { value: 'none', label: 'No approval needed', tone: 'text-slate-600' },
@@ -531,6 +532,14 @@ export function JobDetailPanel({
             placeholder="Production notes, internal context, anything else…"
           />
         </section>
+
+        {/* Section: comments thread (Round 7.10).
+            Renders independently of the form-dirty state — comments
+            POST/PATCH/DELETE go straight to the API and don't pile
+            into the parent form's unsaved changes. So a user can
+            post a comment and then later save (or discard) form
+            edits separately. */}
+        <CommentsThread jobId={form.id} />
       </div>
 
       <div className="px-6 py-4 border-t border-slate-300 sticky bottom-0 bg-white flex items-center justify-between gap-3">

@@ -225,6 +225,31 @@ export async function ensureSchema(): Promise<void> {
     );
   `)
 
+  // ---------- job comments (Round 7.10) ----------
+  // Per-job discussion thread. Comments are flat (no nested replies),
+  // append-only (with per-comment edit/delete by author or admin),
+  // and persist if the author user is later deleted (author_id goes
+  // NULL and the UI renders "Former user").
+  //
+  // ON DELETE CASCADE on job_id: deleting a job removes its comments.
+  // ON DELETE SET NULL on author_id: deleting a user preserves their
+  // historical comments rather than losing the audit trail.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS job_comments (
+      id          TEXT PRIMARY KEY,
+      job_id      TEXT NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+      author_id   TEXT REFERENCES users(id) ON DELETE SET NULL,
+      body        TEXT NOT NULL,
+      edited      BOOLEAN NOT NULL DEFAULT FALSE,
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `)
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS job_comments_job_created_idx
+    ON job_comments (job_id, created_at DESC);
+  `)
+
   // ---------- bootstrap admin ----------
   const userCountRes = await pool.query<{ count: string }>('SELECT COUNT(*)::text AS count FROM users')
   const userCount = Number(userCountRes.rows[0]?.count ?? 0)

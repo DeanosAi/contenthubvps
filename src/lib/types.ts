@@ -186,6 +186,35 @@ export interface SessionUser {
 }
 
 /**
+ * A comment on a job (Round 7.10 — comments / approval thread).
+ *
+ * `authorId` may be null if the original author was deleted from the
+ * users table — the FK uses ON DELETE SET NULL specifically to
+ * preserve historical comments. The UI renders a "Former user"
+ * placeholder in that case.
+ *
+ * `authorName` and `authorEmail` are denormalised for convenience
+ * so the comments API can return ready-to-render data without the
+ * client needing to join against the users list. They're computed
+ * server-side on read; not stored.
+ *
+ * `edited` is a boolean flag separate from `createdAt != updatedAt`
+ * because we want to distinguish "the author edited this comment"
+ * from "the timestamp moved for any internal reason." Cleaner.
+ */
+export interface JobComment {
+  id: string
+  jobId: string
+  authorId: string | null
+  authorName: string | null
+  authorEmail: string | null
+  body: string
+  edited: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+/**
  * Helper: is this stage one of the five built-in reserved stages?
  *
  * Round 7.2 adds custom user stages whose keys are NOT in this list.

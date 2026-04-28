@@ -8,6 +8,7 @@ import type {
   CustomField,
   CustomFieldType,
   Job,
+  JobComment,
   KanbanColumn,
   LiveMetrics,
   MetricSnapshot,
@@ -222,6 +223,39 @@ export function rowToKanbanColumn(row: Row): KanbanColumn {
     color: asString(row.color) || '#64748b',
     sortOrder: asNumber(row.sort_order, 0),
     isBuiltin: asBoolean(row.is_builtin, false),
+    createdAt: asIsoString(row.created_at),
+    updatedAt: asIsoString(row.updated_at),
+  }
+}
+
+/**
+ * Round 7.10 — JobComment mapper.
+ *
+ * Expects rows joined against `users` so the author's display
+ * name / email come through alongside the comment row. The API
+ * route does this JOIN once and feeds rows here. If author_id is
+ * NULL (former user deleted), authorName and authorEmail come
+ * back NULL too — the UI then renders a "Former user" placeholder
+ * rather than crashing on missing data.
+ *
+ * Field name mapping:
+ *   sql:  author_name (from users.name)   →  ts: authorName
+ *   sql:  author_email (from users.email) →  ts: authorEmail
+ */
+export function rowToJobComment(row: Row): JobComment {
+  const authorId = row.author_id == null ? null : asString(row.author_id)
+  const authorName =
+    row.author_name == null ? null : asString(row.author_name) || null
+  const authorEmail =
+    row.author_email == null ? null : asString(row.author_email) || null
+  return {
+    id: asString(row.id),
+    jobId: asString(row.job_id),
+    authorId,
+    authorName,
+    authorEmail,
+    body: asString(row.body),
+    edited: asBoolean(row.edited, false),
     createdAt: asIsoString(row.created_at),
     updatedAt: asIsoString(row.updated_at),
   }
