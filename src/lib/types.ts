@@ -67,11 +67,31 @@ export interface MetricSnapshot {
   metrics: LiveMetrics
 }
 
+/**
+ * Application user role.
+ *
+ * - `admin` — full access, plus user/workspace management.
+ * - `member` — full access to all jobs across all workspaces.
+ *   Cannot manage users or create workspaces.
+ * - `briefer` — Round 7.11. Restricted to a single workspace
+ *   (their venue). Can submit briefs into that workspace, view
+ *   their own jobs, edit only the brief fields they originally
+ *   set, and read+write comments. Cannot see the staff app shell,
+ *   reports, calendar, settings, or other workspaces.
+ */
+export type UserRole = 'admin' | 'member' | 'briefer'
+
 export interface User {
   id: string
   email: string
   name: string | null
-  role: 'admin' | 'member'
+  role: UserRole
+  /**
+   * Round 7.11: required for `briefer` role, NULL for admin/member.
+   * Bound to a single workspace ("venue") — briefers see only
+   * jobs from this workspace.
+   */
+  workspaceId: string | null
   createdAt: string
   updatedAt: string
 }
@@ -156,6 +176,13 @@ export interface Job {
   postedAt: string | null
   liveMetrics: LiveMetrics | null
   lastMetricsFetchAt: string | null
+  /**
+   * Round 7.11: briefer's display name captured at brief-submit time.
+   * NULL for jobs created by staff. Set when a briefer submits via
+   * the brief form — preserves their identity even when the venue's
+   * shared login is later used by someone else.
+   */
+  brieferDisplayName: string | null
   createdAt: string
   updatedAt: string
 }
@@ -178,11 +205,24 @@ export interface AppSetting {
   updatedAt: string
 }
 
-/** Shape of the JWT payload after verifying a session cookie. */
+/**
+ * Shape of the JWT payload after verifying a session cookie.
+ *
+ * Round 7.11 additions:
+ * - `role` includes 'briefer'
+ * - `workspaceId` carried for briefer sessions (null for admin/member)
+ * - `displayName` carried separately from the user's profile name —
+ *   it's the "who's using this venue account today" answer captured
+ *   at session start (or set by the switch-user flow). Used as the
+ *   default for comment authorship and edit attribution. May be null
+ *   if not yet set; UI prompts the briefer for it on first action.
+ */
 export interface SessionUser {
   userId: string
   email: string
-  role: 'admin' | 'member'
+  role: UserRole
+  workspaceId: string | null
+  displayName: string | null
 }
 
 /**
@@ -198,6 +238,14 @@ export interface SessionUser {
  * client needing to join against the users list. They're computed
  * server-side on read; not stored.
  *
+ * Round 7.11 additions:
+ * - `displayName` captured from the session at post time. For staff
+ *   this defaults to their profile name. For briefers it's the
+ *   "who's using this account" session answer. Null for legacy
+ *   comments posted before 7.11 — UI falls back to authorName.
+ * - `authorRole` denormalised so the UI can render a "via venue"
+ *   badge for briefer comments without an extra users join.
+ *
  * `edited` is a boolean flag separate from `createdAt != updatedAt`
  * because we want to distinguish "the author edited this comment"
  * from "the timestamp moved for any internal reason." Cleaner.
@@ -208,10 +256,38 @@ export interface JobComment {
   authorId: string | null
   authorName: string | null
   authorEmail: string | null
+  authorRole: UserRole | null
+  displayName: string | null
   body: string
   edited: boolean
   createdAt: string
   updatedAt: string
+}
+
+/**
+ * Round 7.11 — a single edit event on a tracked job field.
+ *
+ * Surfaced in the UI in two places:
+ *   1. Inline indicator next to a field on the staff detail panel:
+ *      "edited by Tracy on 28 May, 3:47pm"
+ *   2. Full edit timeline view (modal/section) showing every change
+ *      with old/new values.
+ *
+ * `editedByUserId` may be null if the editing user was later deleted
+ * (FK is ON DELETE SET NULL). `editedByName` is snapshotted at edit
+ * time so attribution survives user deletion AND survives a venue
+ * shared-login switching to a different person mid-day.
+ */
+export interface JobEdit {
+  id: string
+  jobId: string
+  fieldName: string
+  oldValue: string | null
+  newValue: string | null
+  editedByUserId: string | null
+  editedByName: string
+  editedByRole: UserRole
+  editedAt: string
 }
 
 /**

@@ -139,11 +139,20 @@ export function mapLiveMetrics(raw: unknown): LiveMetrics | null {
 }
 
 export function rowToUser(row: Row): User {
+  // Round 7.11: role is now a 3-value union. Anything we don't
+  // recognise falls back to 'member' (the safest default — they
+  // can see everything but can't manage other users).
+  const rawRole = String(row.role ?? '')
+  const role: User['role'] =
+    rawRole === 'admin' ? 'admin'
+    : rawRole === 'briefer' ? 'briefer'
+    : 'member'
   return {
     id: asString(row.id),
     email: asString(row.email),
     name: asNullableString(row.name),
-    role: row.role === 'admin' ? 'admin' : 'member',
+    role,
+    workspaceId: asNullableString(row.workspace_id),
     createdAt: asIsoString(row.created_at),
     updatedAt: asIsoString(row.updated_at),
   }
@@ -204,6 +213,7 @@ export function rowToJob(row: Row): Job {
     postedAt: asNullableIsoString(row.posted_at),
     liveMetrics: mapLiveMetrics(row.live_metrics_json),
     lastMetricsFetchAt: asNullableIsoString(row.last_metrics_fetch_at),
+    brieferDisplayName: asNullableString(row.briefer_display_name),
     createdAt: asIsoString(row.created_at),
     updatedAt: asIsoString(row.updated_at),
   }
@@ -248,16 +258,52 @@ export function rowToJobComment(row: Row): JobComment {
     row.author_name == null ? null : asString(row.author_name) || null
   const authorEmail =
     row.author_email == null ? null : asString(row.author_email) || null
+  // Round 7.11: authorRole comes from the users JOIN. May be null
+  // for legacy comments where the author was deleted (FK SET NULL).
+  const rawRole = row.author_role == null ? null : String(row.author_role)
+  const authorRole: JobComment['authorRole'] =
+    rawRole === 'admin' ? 'admin'
+    : rawRole === 'briefer' ? 'briefer'
+    : rawRole === 'member' ? 'member'
+    : null
   return {
     id: asString(row.id),
     jobId: asString(row.job_id),
     authorId,
     authorName,
     authorEmail,
+    authorRole,
+    displayName: asNullableString(row.display_name),
     body: asString(row.body),
     edited: asBoolean(row.edited, false),
     createdAt: asIsoString(row.created_at),
     updatedAt: asIsoString(row.updated_at),
+  }
+}
+
+/**
+ * Round 7.11 — JobEdit mapper.
+ *
+ * Maps a single audit-log row into a UI-renderable JobEdit. The
+ * row is expected to come straight from job_edits (no joins
+ * needed — edited_by_name is snapshotted directly into the row).
+ */
+export function rowToJobEdit(row: Row): import('./types').JobEdit {
+  const rawRole = String(row.edited_by_role ?? 'member')
+  const editedByRole: import('./types').UserRole =
+    rawRole === 'admin' ? 'admin'
+    : rawRole === 'briefer' ? 'briefer'
+    : 'member'
+  return {
+    id: asString(row.id),
+    jobId: asString(row.job_id),
+    fieldName: asString(row.field_name),
+    oldValue: row.old_value == null ? null : String(row.old_value),
+    newValue: row.new_value == null ? null : String(row.new_value),
+    editedByUserId: row.edited_by_user_id == null ? null : asString(row.edited_by_user_id),
+    editedByName: asString(row.edited_by_name) || 'Unknown',
+    editedByRole,
+    editedAt: asIsoString(row.edited_at),
   }
 }
 

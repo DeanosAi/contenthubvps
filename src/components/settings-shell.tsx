@@ -25,7 +25,13 @@ interface SettingsMap {
   [key: string]: string | null
 }
 
-type SessionMe = { userId: string; email: string; role: 'admin' | 'member' } | null
+type SessionMe = {
+  userId: string
+  email: string
+  role: 'admin' | 'member' | 'briefer'
+  workspaceId: string | null
+  displayName: string | null
+} | null
 
 const SETTING_KEYS: SettingKey[] = [
   'app.name',
@@ -57,7 +63,10 @@ export function SettingsShell() {
   const [newUserEmail, setNewUserEmail] = useState('')
   const [newUserName, setNewUserName] = useState('')
   const [newUserPassword, setNewUserPassword] = useState('')
-  const [newUserRole, setNewUserRole] = useState<'admin' | 'member'>('member')
+  const [newUserRole, setNewUserRole] = useState<'admin' | 'member' | 'briefer'>('member')
+  // Round 7.11: workspace binding for briefer accounts. NULL/empty
+  // for staff. Required if role === 'briefer'.
+  const [newUserWorkspaceId, setNewUserWorkspaceId] = useState<string>('')
   const [creatingUser, setCreatingUser] = useState(false)
 
   // ---- ux ----
@@ -138,6 +147,11 @@ export function SettingsShell() {
       setErrorMessage('Password must be at least 8 characters')
       return
     }
+    // Round 7.11: briefer accounts require a workspace binding.
+    if (newUserRole === 'briefer' && !newUserWorkspaceId) {
+      setErrorMessage('Select a workspace (venue) for the briefer account')
+      return
+    }
     setCreatingUser(true)
     setErrorMessage(null)
     const res = await fetch('/api/users', {
@@ -148,6 +162,7 @@ export function SettingsShell() {
         name: newUserName.trim() || undefined,
         password: newUserPassword,
         role: newUserRole,
+        workspaceId: newUserRole === 'briefer' ? newUserWorkspaceId : null,
       }),
     })
     setCreatingUser(false)
@@ -161,6 +176,7 @@ export function SettingsShell() {
     setNewUserName('')
     setNewUserPassword('')
     setNewUserRole('member')
+    setNewUserWorkspaceId('')
     await loadAll()
     setStatusMessage('User created.')
     setTimeout(() => setStatusMessage(null), 3000)
@@ -524,17 +540,33 @@ export function SettingsShell() {
                   </div>
                   {isAdmin ? (
                     <>
-                      <select
-                        value={u.role}
-                        onChange={(e) =>
-                          changeUserRole(u, e.target.value as 'admin' | 'member')
-                        }
-                        className="rounded-lg border bg-transparent px-2 py-1 text-xs"
-                        disabled={u.id === me?.userId && u.role === 'admin'}
-                      >
-                        <option value="admin">admin</option>
-                        <option value="member">member</option>
-                      </select>
+                      {u.role === 'briefer' ? (
+                        // Round 7.11: don't allow flipping a briefer
+                        // to staff via this dropdown. Doing so would
+                        // require coordinated workspace_id NULL'ing
+                        // on the server. To reclassify, delete and
+                        // recreate. Show a static badge instead.
+                        <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 border border-amber-200 px-2 py-0.5 text-[11px] text-amber-700">
+                          briefer
+                          {u.workspaceId && workspaces.find((w) => w.id === u.workspaceId) && (
+                            <span className="text-amber-600">
+                              · {workspaces.find((w) => w.id === u.workspaceId)?.name}
+                            </span>
+                          )}
+                        </span>
+                      ) : (
+                        <select
+                          value={u.role}
+                          onChange={(e) =>
+                            changeUserRole(u, e.target.value as 'admin' | 'member')
+                          }
+                          className="rounded-lg border bg-transparent px-2 py-1 text-xs"
+                          disabled={u.id === me?.userId && u.role === 'admin'}
+                        >
+                          <option value="admin">admin</option>
+                          <option value="member">member</option>
+                        </select>
+                      )}
                       <button
                         type="button"
                         onClick={() => resetUserPassword(u)}
@@ -590,11 +622,31 @@ export function SettingsShell() {
                 <select
                   className="rounded-lg border bg-transparent px-3 py-2 text-sm"
                   value={newUserRole}
-                  onChange={(e) => setNewUserRole(e.target.value as 'admin' | 'member')}
+                  onChange={(e) =>
+                    setNewUserRole(e.target.value as 'admin' | 'member' | 'briefer')
+                  }
                 >
-                  <option value="member">member</option>
-                  <option value="admin">admin</option>
+                  <option value="member">member (staff)</option>
+                  <option value="admin">admin (staff)</option>
+                  <option value="briefer">briefer (venue login)</option>
                 </select>
+                {/* Round 7.11: workspace picker — only shown when
+                    creating a briefer. Required for that role; the
+                    API rejects briefer-without-workspace. */}
+                {newUserRole === 'briefer' && (
+                  <select
+                    className="rounded-lg border bg-transparent px-3 py-2 text-sm md:col-span-2"
+                    value={newUserWorkspaceId}
+                    onChange={(e) => setNewUserWorkspaceId(e.target.value)}
+                  >
+                    <option value="">Select workspace (venue)…</option>
+                    {workspaces.map((ws) => (
+                      <option key={ws.id} value={ws.id}>
+                        {ws.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
               <div className="flex justify-end">
                 <button
@@ -608,7 +660,8 @@ export function SettingsShell() {
               </div>
               <p className="text-[11px] text-[hsl(var(--muted-foreground))]">
                 Tip: share the email + password with the teammate via Teams.
-                They can change their password later by asking an admin to reset it.
+                {' '}For briefer accounts, this is the shared login the venue
+                will use to access Content Hub.
               </p>
             </div>
           )}

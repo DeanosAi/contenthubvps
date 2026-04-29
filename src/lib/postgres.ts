@@ -39,6 +39,10 @@ export async function ensureSchema(): Promise<void> {
   `)
   await pool.query(`CREATE INDEX IF NOT EXISTS users_email_idx ON users (email);`)
 
+  // NOTE: the workspace_id column on users is added AFTER the
+  // workspaces table is created, since it has an FK to workspaces.
+  // See "Round 7.11 — briefer role + workspace scoping" below.
+
   // ---------- workspaces ----------
   await pool.query(`
     CREATE TABLE IF NOT EXISTS workspaces (
@@ -55,6 +59,23 @@ export async function ensureSchema(): Promise<void> {
   `)
   await pool.query(`ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS facebook_page_url TEXT;`)
   await pool.query(`ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS instagram_page_url TEXT;`)
+
+  // ---------- Round 7.11 — briefer role + workspace scoping ----------
+  // Adds an optional workspace_id to users so a "briefer" role can be
+  // bound to a single workspace (their venue). NULL for admin/member;
+  // required at the API layer for the briefer role.
+  //
+  // ON DELETE CASCADE on workspace_id: if a venue/workspace is deleted,
+  // its briefer login goes with it. That's the right behaviour — a
+  // briefer login is meaningless without its workspace.
+  await pool.query(
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS workspace_id TEXT
+       REFERENCES workspaces(id) ON DELETE CASCADE;`
+  )
+  await pool.query(
+    `CREATE INDEX IF NOT EXISTS users_workspace_idx ON users (workspace_id)
+       WHERE workspace_id IS NOT NULL;`
+  )
 
   // ---------- jobs ----------
   await pool.query(`
@@ -98,6 +119,18 @@ export async function ensureSchema(): Promise<void> {
     ON jobs (workspace_id, campaign)
     WHERE campaign IS NOT NULL;
   `)
+
+  // ---------- Round 7.11 — briefer attribution on jobs ----------
+  // When a brief is submitted by a briefer, we capture the actual
+  // person's name from their session at submit time. Stored on the
+  // job so the staff team can see "Tracy briefed this" even when
+  // the venue's shared login is later used by Sarah.
+  //
+  // Independent of any user FK — preserves attribution across
+  // session changes and across staff renaming/deleting briefer
+  // accounts. The shared venue login provides the WORKSPACE binding;
+  // briefer_display_name provides the WHO binding.
+  await pool.query(`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS briefer_display_name TEXT;`)
 
   // ---------- Round 7.2: kanban_columns ----------
   // Per-workspace kanban column configuration. Lets users rename built-in
@@ -248,6 +281,61 @@ export async function ensureSchema(): Promise<void> {
   await pool.query(`
     CREATE INDEX IF NOT EXISTS job_comments_job_created_idx
     ON job_comments (job_id, created_at DESC);
+  `)
+
+  // ---------- Round 7.11 — display_name on job_comments ----------
+  // Comments now carry a display_name captured from the session at
+  // post time. For staff comments this defaults to the user's name
+  // field, but for briefer comments it's the venue session's
+  // current "who's using this account today" answer. Lets the UI
+  // render "Tracy from Mt Druitt: ..." even though the underlying
+  // user record is just the shared venue login.
+  await pool.query(
+    `ALTER TABLE job_comments ADD COLUMN IF NOT EXISTS display_name TEXT;`
+  )
+
+  // ---------- Round 7.11 — job_edits audit log ----------
+  // Per-field edit history. Logs every PATCH that touches a tracked
+  // field on a job. Fed by the jobs PATCH endpoint via the
+  // logJobEdits() helper. Surfaces in the UI as inline indicators
+  // ("edited by X on Y") next to fields, plus a full timeline
+  // accessible from the detail panel.
+  //
+  // Design notes:
+  //
+  // - One row per (job, field, edit). Multiple field changes in a
+  //   single PATCH produce multiple rows so each field's history
+  //   can be viewed independently.
+  // - old_value and new_value store full text. For long descriptions
+  //   this means duplicate storage, but at our scale the cost is
+  //   negligible (~MB/year for the whole team).
+  // - edited_by_name snapshots the session display_name at edit
+  //   time. Preserves "Tracy edited this" across user renames and
+  //   shared-login user changes.
+  // - ON DELETE CASCADE on job_id: deleting a job removes its edit
+  //   history. ON DELETE SET NULL on edited_by_user_id: deleting a
+  //   user preserves the edit log (we still have the snapshotted
+  //   name).
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS job_edits (
+      id                  TEXT PRIMARY KEY,
+      job_id              TEXT NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+      field_name          TEXT NOT NULL,
+      old_value           TEXT,
+      new_value           TEXT,
+      edited_by_user_id   TEXT REFERENCES users(id) ON DELETE SET NULL,
+      edited_by_name      TEXT NOT NULL,
+      edited_by_role      TEXT NOT NULL,
+      edited_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `)
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS job_edits_job_idx
+    ON job_edits (job_id, edited_at DESC);
+  `)
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS job_edits_job_field_idx
+    ON job_edits (job_id, field_name, edited_at DESC);
   `)
 
   // ---------- bootstrap admin ----------

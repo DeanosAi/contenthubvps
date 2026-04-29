@@ -52,6 +52,7 @@ const CreateJobInput = z.object({
 
 // Includes Round 4.1 additions: posted_at, live_metrics_json, last_metrics_fetch_at.
 // Round 6.1: campaign.
+// Round 7.11: briefer_display_name (briefer attribution).
 const COLUMN_LIST = `
   id, workspace_id, title, description, stage, priority, due_date,
   hashtags, platform, live_url, notes,
@@ -59,21 +60,45 @@ const COLUMN_LIST = `
   custom_fields_json, campaign,
   facebook_live_url, facebook_post_id, instagram_live_url,
   posted_at, live_metrics_json, last_metrics_fetch_at,
+  briefer_display_name,
   created_at, updated_at
 `
 
 /** GET /api/jobs?workspaceId=... — list jobs, optionally filtered to a
- * single workspace. */
+ * single workspace.
+ *
+ * Round 7.11: briefers see only their own workspace's jobs regardless
+ * of any workspaceId query param. If they pass a workspaceId for a
+ * different workspace, we 404 (don't leak that workspace exists).
+ */
 export async function GET(req: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   await ensureSchema()
-  const workspaceId = req.nextUrl.searchParams.get('workspaceId')
-  const result = workspaceId
+  const queriedWorkspaceId = req.nextUrl.searchParams.get('workspaceId')
+
+  // Round 7.11: briefer scoping. Always filter to their own workspace.
+  if (session.role === 'briefer') {
+    if (!session.workspaceId) {
+      return NextResponse.json({ error: 'Briefer account missing workspace binding' }, { status: 403 })
+    }
+    if (queriedWorkspaceId && queriedWorkspaceId !== session.workspaceId) {
+      // Don't leak the existence of other workspaces — return empty.
+      return NextResponse.json([])
+    }
+    const result = await pool.query(
+      `SELECT ${COLUMN_LIST} FROM jobs WHERE workspace_id = $1 ORDER BY created_at DESC`,
+      [session.workspaceId]
+    )
+    return NextResponse.json(result.rows.map(rowToJob))
+  }
+
+  // Staff path (admin/member): unchanged.
+  const result = queriedWorkspaceId
     ? await pool.query(
         `SELECT ${COLUMN_LIST} FROM jobs WHERE workspace_id = $1 ORDER BY created_at DESC`,
-        [workspaceId]
+        [queriedWorkspaceId]
       )
     : await pool.query(`SELECT ${COLUMN_LIST} FROM jobs ORDER BY created_at DESC`)
   return NextResponse.json(result.rows.map(rowToJob))
@@ -82,6 +107,16 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  // Round 7.11: briefers cannot create arbitrary jobs via this endpoint.
+  // They submit briefs via POST /api/jobs/brief-submit which has a
+  // restricted payload and auto-fills workspace from their session.
+  if (session.role === 'briefer') {
+    return NextResponse.json(
+      { error: 'Briefers must submit via the brief form' },
+      { status: 403 }
+    )
+  }
 
   let body: unknown
   try {

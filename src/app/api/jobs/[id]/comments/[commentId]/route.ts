@@ -3,28 +3,43 @@ import { z } from 'zod'
 import { pool, ensureSchema } from '@/lib/postgres'
 import { getSession } from '@/lib/auth'
 import { rowToJobComment } from '@/lib/db-mappers'
+import { assertCanViewJob } from '@/lib/permissions'
 
 /**
  * Round 7.10 — per-comment edit/delete endpoints.
+ * Round 7.11 — adds workspace-scoped permission checks.
  *
  * PATCH  /api/jobs/:id/comments/:commentId  — edit comment body
  * DELETE /api/jobs/:id/comments/:commentId  — delete the comment
  *
  * Permission model:
- *   - The original author can edit or delete their own comment.
- *   - Admins can delete (but NOT edit) anyone's comment. Editing
- *     someone else's comment without their knowledge is a worse
- *     outcome than deleting it — better to remove and let the
- *     author re-post if they choose.
- *   - Nobody else can do anything.
+ *   - Caller must be able to view the parent job (workspace check
+ *     enforced via assertCanViewJob — briefers in another workspace
+ *     get 404 to avoid leaking comment existence).
+ *   - For PATCH (edit): only the original author. Admins cannot
+ *     edit other people's comments — editing someone's words without
+ *     their knowledge is worse than deleting.
+ *   - For DELETE: original author OR an admin (admin-as-staff only;
+ *     a briefer who happens to have role=admin elsewhere doesn't
+ *     apply — briefers are always role=briefer in this system).
  *
- * The jobId in the URL is validated to exist but otherwise unused
- * (the comment's own job_id FK handles the relationship).
+ * Round 7.11 specific notes:
+ *   - The SELECT joins users to pull author_role and reads the
+ *     stored display_name on the comment row, so the response shape
+ *     matches what the list endpoint returns.
  */
 
 const PatchCommentInput = z.object({
   body: z.string().trim().min(1, 'Comment cannot be empty').max(5000),
 })
+
+const COMMENT_SELECT = `
+  c.id, c.job_id, c.author_id, c.body, c.edited, c.display_name,
+  c.created_at, c.updated_at,
+  u.name  AS author_name,
+  u.email AS author_email,
+  u.role  AS author_role
+`
 
 export async function PATCH(
   req: NextRequest,
@@ -36,23 +51,29 @@ export async function PATCH(
   await ensureSchema()
   const { id: jobId, commentId } = await params
 
-  // Verify the job exists (defensive — prevents orphaned comments)
-  const jobRes = await pool.query<{ id: string }>(
-    `SELECT id FROM jobs WHERE id = $1`,
+  // Workspace gate: pull the job's workspace id and run the access
+  // check before doing any other work. Briefers in the wrong
+  // workspace get 404 here, indistinguishable from "comment doesn't
+  // exist."
+  const jobRes = await pool.query<{ id: string; workspace_id: string }>(
+    `SELECT id, workspace_id FROM jobs WHERE id = $1`,
     [jobId],
   )
   if (jobRes.rowCount === 0) {
     return NextResponse.json({ error: 'Job not found' }, { status: 404 })
   }
+  const accessCheck = assertCanViewJob(session, jobRes.rows[0].workspace_id)
+  if (!accessCheck.ok) {
+    return NextResponse.json({ error: accessCheck.error }, { status: accessCheck.status })
+  }
 
-  // Fetch the comment and verify authorship
+  // Fetch the comment to verify authorship.
   const commentRes = await pool.query<{
     id: string
-    author_id: string
+    author_id: string | null
     body: string
-    edited: boolean
   }>(
-    `SELECT id, author_id, body, edited FROM job_comments WHERE id = $1 AND job_id = $2`,
+    `SELECT id, author_id, body FROM job_comments WHERE id = $1 AND job_id = $2`,
     [commentId, jobId],
   )
   if (commentRes.rowCount === 0) {
@@ -60,7 +81,7 @@ export async function PATCH(
   }
   const comment = commentRes.rows[0]
 
-  // Only the original author can edit
+  // Edit permission: original author only.
   if (comment.author_id !== session.userId) {
     return NextResponse.json(
       { error: 'You can only edit your own comments' },
@@ -83,11 +104,12 @@ export async function PATCH(
     )
   }
 
-  // No-change detection: if body is identical, just return the comment
+  // No-change short-circuit. Avoid writing edited=TRUE if the body
+  // is identical to what's already stored — saves a "this was edited"
+  // marker from appearing for a no-op save.
   if (parsed.data.body === comment.body) {
     const result = await pool.query(
-      `SELECT c.id, c.job_id, c.author_id, u.name AS author_name, u.email AS author_email,
-              c.body, c.edited, c.created_at, c.updated_at
+      `SELECT ${COMMENT_SELECT}
          FROM job_comments c
          LEFT JOIN users u ON u.id = c.author_id
         WHERE c.id = $1`,
@@ -97,14 +119,14 @@ export async function PATCH(
   }
 
   await pool.query(
-    `UPDATE job_comments SET body = $1, edited = TRUE, updated_at = NOW()
+    `UPDATE job_comments
+        SET body = $1, edited = TRUE, updated_at = NOW()
       WHERE id = $2`,
     [parsed.data.body, commentId],
   )
 
   const result = await pool.query(
-    `SELECT c.id, c.job_id, c.author_id, u.name AS author_name, u.email AS author_email,
-            c.body, c.edited, c.created_at, c.updated_at
+    `SELECT ${COMMENT_SELECT}
        FROM job_comments c
        LEFT JOIN users u ON u.id = c.author_id
       WHERE c.id = $1`,
@@ -123,17 +145,20 @@ export async function DELETE(
   await ensureSchema()
   const { id: jobId, commentId } = await params
 
-  // Verify the job exists (defensive)
-  const jobRes = await pool.query<{ id: string }>(
-    `SELECT id FROM jobs WHERE id = $1`,
+  // Workspace gate first.
+  const jobRes = await pool.query<{ id: string; workspace_id: string }>(
+    `SELECT id, workspace_id FROM jobs WHERE id = $1`,
     [jobId],
   )
   if (jobRes.rowCount === 0) {
     return NextResponse.json({ error: 'Job not found' }, { status: 404 })
   }
+  const accessCheck = assertCanViewJob(session, jobRes.rows[0].workspace_id)
+  if (!accessCheck.ok) {
+    return NextResponse.json({ error: accessCheck.error }, { status: accessCheck.status })
+  }
 
-  // Fetch the comment and verify authorship or admin status
-  const commentRes = await pool.query<{ id: string; author_id: string }>(
+  const commentRes = await pool.query<{ id: string; author_id: string | null }>(
     `SELECT id, author_id FROM job_comments WHERE id = $1 AND job_id = $2`,
     [commentId, jobId],
   )

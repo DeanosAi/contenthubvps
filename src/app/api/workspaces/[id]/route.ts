@@ -14,9 +14,18 @@ const UpdateWorkspaceInput = z
   })
   .refine((v) => Object.keys(v).length > 0, { message: 'No fields to update' })
 
+/**
+ * Round 7.11: PATCH/DELETE on workspaces is staff-only. Briefers
+ * cannot modify workspaces — including their own. The venue's
+ * config (name, color, page URLs, kanban columns) belongs to staff.
+ */
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  if (session.role === 'briefer') {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
 
   const { id } = await params
 
@@ -68,6 +77,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  if (session.role === 'briefer') {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
 
   const { id } = await params
   await ensureSchema()

@@ -54,6 +54,11 @@ export async function GET(req: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
+  // Round 7.11: reports are a staff feature.
+  if (session.role === 'briefer') {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
   const parsed = QuerySchema.safeParse({
     workspaceId: req.nextUrl.searchParams.get('workspaceId') ?? undefined,
     from: req.nextUrl.searchParams.get('from') ?? undefined,

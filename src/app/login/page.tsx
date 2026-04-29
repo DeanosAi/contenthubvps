@@ -35,8 +35,19 @@ function LoginForm() {
       setError(data?.error || 'Login failed')
       return
     }
-    // Redirect to the original target page (set by middleware) or to /app.
-    router.push(next.startsWith('/') && !next.startsWith('//') ? next : '/app')
+    // Round 7.11: respect the role-based redirectTo from the API
+    // response. If the user originally tried to access a specific
+    // staff page (?next=...) AND they're staff, honour that.
+    // For briefers, always go to /briefer regardless of ?next.
+    const redirectTo: string =
+      typeof data?.redirectTo === 'string' ? data.redirectTo : '/app'
+    const isStaffTarget =
+      redirectTo === '/app' &&
+      next.startsWith('/') &&
+      !next.startsWith('//') &&
+      !next.startsWith('/briefer')
+    const target = isStaffTarget ? next : redirectTo
+    router.push(target)
   }
 
   return (

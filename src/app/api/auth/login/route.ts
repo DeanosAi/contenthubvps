@@ -9,6 +9,20 @@ const LoginInput = z.object({
   password: z.string().min(1),
 })
 
+/**
+ * Round 7.11 — login issues a session payload that carries:
+ *   - userId, email, role  (existed)
+ *   - workspaceId          (NEW — required for briefer scoping)
+ *   - displayName          (NEW — set to the user's profile name
+ *                            initially; for briefers this gets
+ *                            overridden by the per-session
+ *                            "who's using this account today"
+ *                            prompt via /api/auth/set-display-name)
+ *
+ * The response includes a `redirectTo` hint so the login page can
+ * route briefers to /briefer and staff to /app without the client
+ * needing to know the role-routing logic.
+ */
 export async function POST(req: NextRequest) {
   let body: unknown
   try {
@@ -24,12 +38,10 @@ export async function POST(req: NextRequest) {
 
   await ensureSchema()
 
-  // Generic auth-failure message for both "no such user" and "wrong
-  // password" cases so we don't leak which emails exist on the system.
   const FAIL_MESSAGE = 'Invalid email or password'
 
   const result = await pool.query(
-    'SELECT id, email, password_hash, name, role, created_at, updated_at FROM users WHERE email = $1 LIMIT 1',
+    'SELECT id, email, password_hash, name, role, workspace_id, created_at, updated_at FROM users WHERE email = $1 LIMIT 1',
     [parsed.data.email]
   )
   if (result.rows.length === 0) {
@@ -43,8 +55,32 @@ export async function POST(req: NextRequest) {
   }
 
   const user = rowToUser(row)
-  const token = signSession({ userId: user.id, email: user.email, role: user.role })
+
+  // Validate briefer accounts are workspace-bound. A briefer with a
+  // null workspace_id is misconfigured and shouldn't be able to log
+  // in successfully — would lead to confusing UX (logged in but can
+  // see nothing). Block at the gate.
+  if (user.role === 'briefer' && !user.workspaceId) {
+    return NextResponse.json(
+      { error: 'Briefer account is not bound to a workspace. Contact an admin.' },
+      { status: 403 }
+    )
+  }
+
+  const token = signSession({
+    userId: user.id,
+    email: user.email,
+    role: user.role,
+    workspaceId: user.workspaceId,
+    // Initial displayName: the user's profile name. For briefers
+    // this will be replaced by the per-session "who are you" answer
+    // before they post anything. For staff it stays as their name.
+    displayName: user.name,
+  })
   await setSessionCookie(token)
 
-  return NextResponse.json({ ok: true, user })
+  // redirectTo: where the login page should send the user.
+  const redirectTo = user.role === 'briefer' ? '/briefer' : '/app'
+
+  return NextResponse.json({ ok: true, user, redirectTo })
 }

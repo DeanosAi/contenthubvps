@@ -22,6 +22,11 @@ export async function POST(req: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
+  // Round 7.11: briefers cannot reorder workspaces.
+  if (session.role === 'briefer') {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
   let body: unknown
   try {
     body = await req.json()

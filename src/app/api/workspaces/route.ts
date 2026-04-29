@@ -19,17 +19,30 @@ const CreateWorkspaceInput = z.object({
   instagramPageUrl: z.string().trim().nullable().optional(),
 })
 
-/** GET /api/workspaces — list all workspaces visible to the current user.
+/** GET /api/workspaces — list workspaces visible to the current user.
  *
- * For now (5-person team, 6 brands) the model is "everyone signed in sees
- * every workspace." When per-user access control is needed, this is the
- * place to filter the results. The `owner_id` is preserved for that future
- * use. */
+ * Round 7.11: briefers see ONLY their own workspace (the venue they
+ * belong to). Staff (admin/member) continue to see all workspaces.
+ */
 export async function GET() {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   await ensureSchema()
+
+  // Briefer scoping. If a briefer's workspaceId is somehow null
+  // (misconfigured account), return empty rather than leaking everything.
+  if (session.role === 'briefer') {
+    if (!session.workspaceId) return NextResponse.json([])
+    const result = await pool.query(
+      `SELECT id, owner_id, name, color, sort_order, facebook_page_url, instagram_page_url, created_at, updated_at
+       FROM workspaces
+       WHERE id = $1`,
+      [session.workspaceId]
+    )
+    return NextResponse.json(result.rows.map(rowToWorkspace))
+  }
+
   const result = await pool.query(
     `SELECT id, owner_id, name, color, sort_order, facebook_page_url, instagram_page_url, created_at, updated_at
      FROM workspaces
@@ -38,12 +51,16 @@ export async function GET() {
   return NextResponse.json(result.rows.map(rowToWorkspace))
 }
 
-/** POST /api/workspaces — any signed-in user can create a workspace.
- * The creator is recorded as the owner_id; this currently has no
- * per-workspace permission impact but is preserved for later. */
+/** POST /api/workspaces — staff can create workspaces. Briefers cannot.
+ * The creator is recorded as the owner_id; preserved for later RBAC. */
 export async function POST(req: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  // Round 7.11: briefers cannot create workspaces.
+  if (session.role === 'briefer') {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
 
   let body: unknown
   try {

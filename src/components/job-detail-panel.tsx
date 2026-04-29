@@ -7,6 +7,7 @@ import { AssetLinksEditor } from './asset-links-editor'
 import { CustomFieldsEditor } from './custom-fields-editor'
 import { CampaignField } from './campaign-field'
 import { CommentsThread } from './comments-thread'
+import { BrieferEditHistoryButton } from './briefer-edit-history-button'
 
 const APPROVALS: { value: ApprovalStatus; label: string; tone: string }[] = [
   { value: 'none', label: 'No approval needed', tone: 'text-slate-600' },
@@ -230,7 +231,20 @@ export function JobDetailPanel({
       <div className="flex-1 px-6 py-5 space-y-6">
         {/* Section: core */}
         <section className="space-y-4">
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-600">Overview</h3>
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-600">Overview</h3>
+            <BrieferEditHistoryButton jobId={form.id} />
+          </div>
+
+          {/* Round 7.11: briefer attribution. Shown only when this
+              job was actually submitted by a briefer (the field is
+              null for staff-created jobs). */}
+          {form.brieferDisplayName && (
+            <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-900">
+              <span className="font-medium">Briefed by:</span>{' '}
+              {form.brieferDisplayName}
+            </div>
+          )}
 
           <div>
             <label className="text-xs text-slate-600">Title</label>

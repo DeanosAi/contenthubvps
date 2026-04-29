@@ -5,38 +5,64 @@ import { pool, ensureSchema } from '@/lib/postgres'
 import { getSession, hashPassword, requireAdmin } from '@/lib/auth'
 import { rowToUser } from '@/lib/db-mappers'
 
+/**
+ * Round 7.11 — accepts the new `briefer` role with a required
+ * `workspaceId`. The role validation enforces:
+ *   - admin/member: workspaceId must be NULL/absent
+ *   - briefer: workspaceId is required and must reference an
+ *     existing workspace
+ *
+ * This invariant matches the schema (briefer-without-workspace is
+ * a misconfigured account) and the assertions in lib/permissions.ts.
+ */
 const CreateUserInput = z.object({
   email: z.string().email().transform((s) => s.trim().toLowerCase()),
   password: z.string().min(8),
   name: z.string().trim().optional(),
-  role: z.enum(['admin', 'member']).optional(),
+  role: z.enum(['admin', 'member', 'briefer']).optional(),
+  workspaceId: z.string().nullable().optional(),
 })
 
 /** GET /api/users — list users.
  *
- * Visibility rules:
+ * Visibility rules (Round 7.11 update):
  *  - admins see everyone (used by the user-management UI)
- *  - members see a name+email-only list (used to populate the "assigned
- *    to" dropdown on jobs without exposing role/email metadata to non-admins).
+ *  - members see a name+email-only slim list (assignee dropdown)
+ *  - briefers see ONLY themselves — they cannot enumerate other
+ *    briefers, staff, or anyone else
  *
- * We deliberately never return password hashes from any API. */
+ * We never return password hashes.
+ */
 export async function GET() {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   await ensureSchema()
+
+  // Briefer scoping — return only their own user record.
+  if (session.role === 'briefer') {
+    const result = await pool.query(
+      'SELECT id, email, name, role, workspace_id, created_at, updated_at FROM users WHERE id = $1',
+      [session.userId],
+    )
+    return NextResponse.json(result.rows.map(rowToUser))
+  }
+
   const result = await pool.query(
-    'SELECT id, email, name, role, created_at, updated_at FROM users ORDER BY created_at ASC'
+    'SELECT id, email, name, role, workspace_id, created_at, updated_at FROM users ORDER BY created_at ASC'
   )
   const users = result.rows.map(rowToUser)
 
   if (session.role === 'admin') {
     return NextResponse.json(users)
   }
-  // Non-admins get a slim list — id + name + email only — so they can
-  // pick assignees but can't see who's an admin.
+  // Members get the slim list (used for assignee dropdowns).
+  // Round 7.11: filter out briefers here too — staff don't assign
+  // jobs to briefers, only to themselves and each other.
   return NextResponse.json(
-    users.map((u) => ({ id: u.id, email: u.email, name: u.name }))
+    users
+      .filter((u) => u.role !== 'briefer')
+      .map((u) => ({ id: u.id, email: u.email, name: u.name }))
   )
 }
 
@@ -60,7 +86,35 @@ export async function POST(req: NextRequest) {
     )
   }
 
+  // Round 7.11: validate role + workspaceId combination.
+  const role = parsed.data.role ?? 'member'
+  const workspaceId = parsed.data.workspaceId ?? null
+
+  if (role === 'briefer') {
+    if (!workspaceId) {
+      return NextResponse.json(
+        { error: 'Briefer accounts must be bound to a workspace (venue).' },
+        { status: 400 }
+      )
+    }
+  } else {
+    if (workspaceId) {
+      return NextResponse.json(
+        { error: 'Only briefer accounts can be bound to a workspace.' },
+        { status: 400 }
+      )
+    }
+  }
+
   await ensureSchema()
+
+  // Validate workspace exists if provided.
+  if (workspaceId) {
+    const ws = await pool.query<{ id: string }>('SELECT id FROM workspaces WHERE id = $1', [workspaceId])
+    if (ws.rows.length === 0) {
+      return NextResponse.json({ error: 'Workspace not found' }, { status: 400 })
+    }
+  }
 
   const existing = await pool.query('SELECT id FROM users WHERE email = $1', [parsed.data.email])
   if (existing.rows.length > 0) {
@@ -70,9 +124,9 @@ export async function POST(req: NextRequest) {
   const id = randomUUID()
   const hash = await hashPassword(parsed.data.password)
   await pool.query(
-    `INSERT INTO users (id, email, password_hash, name, role)
-     VALUES ($1, $2, $3, $4, $5)`,
-    [id, parsed.data.email, hash, parsed.data.name ?? null, parsed.data.role ?? 'member']
+    `INSERT INTO users (id, email, password_hash, name, role, workspace_id)
+     VALUES ($1, $2, $3, $4, $5, $6)`,
+    [id, parsed.data.email, hash, parsed.data.name ?? null, role, workspaceId]
   )
 
   return NextResponse.json({ ok: true, id })

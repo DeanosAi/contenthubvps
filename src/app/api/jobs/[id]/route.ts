@@ -3,6 +3,14 @@ import { z } from 'zod'
 import { pool, ensureSchema } from '@/lib/postgres'
 import { getSession } from '@/lib/auth'
 import { rowToJob } from '@/lib/db-mappers'
+import {
+  assertCanViewJob,
+  assertCanEditJobField,
+  assertCanDeleteJob,
+  logJobEdits,
+  valueForAudit,
+  type FieldChange,
+} from '@/lib/permissions'
 
 const STAGES = ['brief', 'production', 'ready', 'posted', 'archive'] as const
 const APPROVAL = ['none', 'awaiting', 'approved', 'changes_requested'] as const
@@ -50,6 +58,7 @@ const COLUMN_LIST = `
   custom_fields_json, campaign,
   facebook_live_url, facebook_post_id, instagram_live_url,
   posted_at, live_metrics_json, last_metrics_fetch_at,
+  briefer_display_name,
   created_at, updated_at
 `
 
@@ -84,6 +93,19 @@ function normaliseCampaign(v: string | null | undefined): string | null {
   return trimmed.length > 0 ? trimmed : null
 }
 
+/**
+ * Round 7.11: PATCH with permission enforcement + edit logging.
+ *
+ * Flow:
+ *   1. Look up the job (in a transaction). 404 if not found.
+ *   2. For each field in the payload, check assertCanEditJobField()
+ *      against the job's workspace_id. If any field is forbidden,
+ *      return 403 — we don't do partial updates.
+ *   3. Run the UPDATE.
+ *   4. For each field actually changed (where new value != old value),
+ *      log to job_edits.
+ *   5. Commit.
+ */
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -111,32 +133,68 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   try {
     await client.query('BEGIN')
 
-    const before = await client.query<{ stage: string; posted_at: Date | null }>(
-      'SELECT stage, posted_at FROM jobs WHERE id = $1 FOR UPDATE',
+    const beforeRes = await client.query(
+      `SELECT ${COLUMN_LIST} FROM jobs WHERE id = $1 FOR UPDATE`,
       [id]
     )
-    if (before.rows.length === 0) {
+    if (beforeRes.rows.length === 0) {
       await client.query('ROLLBACK')
       return NextResponse.json({ error: 'Not found' }, { status: 404 })
     }
-    const oldStage = before.rows[0].stage
-    const oldPostedAt = before.rows[0].posted_at
+    const beforeRow = beforeRes.rows[0] as Record<string, unknown>
+    const beforeWorkspaceId = String(beforeRow.workspace_id)
+
+    const viewCheck = assertCanViewJob(session, beforeWorkspaceId)
+    if (!viewCheck.ok) {
+      await client.query('ROLLBACK')
+      return NextResponse.json({ error: viewCheck.error }, { status: viewCheck.status })
+    }
+
+    for (const k of Object.keys(parsed.data)) {
+      const col = COLUMN_MAP[k]
+      if (!col) continue
+      const editCheck = assertCanEditJobField(session, beforeWorkspaceId, col)
+      if (!editCheck.ok) {
+        await client.query('ROLLBACK')
+        return NextResponse.json({ error: editCheck.error }, { status: editCheck.status })
+      }
+    }
+
+    const oldStage = String(beforeRow.stage)
+    const oldPostedAt = beforeRow.posted_at as Date | null
 
     const sets: string[] = []
     const values: unknown[] = []
     let n = 1
+
+    const audit: FieldChange[] = []
+
     for (const [k, v] of Object.entries(parsed.data)) {
       const col = COLUMN_MAP[k]
       if (!col) continue
-      sets.push(`${col} = $${n++}`)
+
+      let newDbValue: unknown
       if (k === 'dueDate') {
-        values.push(v ? new Date(v as string) : null)
+        newDbValue = v ? new Date(v as string) : null
       } else if (JSONB_KEYS.has(k)) {
-        values.push(v == null ? null : JSON.stringify(v))
+        newDbValue = v == null ? null : JSON.stringify(v)
       } else if (k === 'campaign') {
-        values.push(normaliseCampaign(v as string | null | undefined))
+        newDbValue = normaliseCampaign(v as string | null | undefined)
       } else {
-        values.push(v)
+        newDbValue = v
+      }
+
+      sets.push(`${col} = $${n++}`)
+      values.push(newDbValue)
+
+      if (!JSONB_KEYS.has(k)) {
+        const oldStr = valueForAudit(beforeRow[col])
+        const newStr = valueForAudit(
+          k === 'dueDate' ? (newDbValue as Date | null)?.toISOString() ?? null : newDbValue
+        )
+        if (oldStr !== newStr) {
+          audit.push({ fieldName: col, oldValue: oldStr, newValue: newStr })
+        }
       }
     }
 
@@ -152,6 +210,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     values.push(id)
 
     await client.query(`UPDATE jobs SET ${sets.join(', ')} WHERE id = $${n}`, values)
+
+    if (audit.length > 0) {
+      await logJobEdits(client, id, audit, session)
+    }
+
     await client.query('COMMIT')
   } catch (err) {
     await client.query('ROLLBACK')
@@ -171,6 +234,20 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
 
   const { id } = await params
   await ensureSchema()
+
+  const lookup = await pool.query<{ workspace_id: string }>(
+    'SELECT workspace_id FROM jobs WHERE id = $1',
+    [id]
+  )
+  if (lookup.rows.length === 0) {
+    return NextResponse.json({ ok: true })
+  }
+
+  const accessCheck = assertCanDeleteJob(session, lookup.rows[0].workspace_id)
+  if (!accessCheck.ok) {
+    return NextResponse.json({ error: accessCheck.error }, { status: accessCheck.status })
+  }
+
   await pool.query('DELETE FROM jobs WHERE id = $1', [id])
   return NextResponse.json({ ok: true })
 }
@@ -183,5 +260,11 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   await ensureSchema()
   const result = await pool.query(`SELECT ${COLUMN_LIST} FROM jobs WHERE id = $1`, [id])
   if (result.rows.length === 0) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  return NextResponse.json(rowToJob(result.rows[0]))
+
+  const job = rowToJob(result.rows[0])
+  const viewCheck = assertCanViewJob(session, job.workspaceId)
+  if (!viewCheck.ok) {
+    return NextResponse.json({ error: viewCheck.error }, { status: viewCheck.status })
+  }
+  return NextResponse.json(job)
 }

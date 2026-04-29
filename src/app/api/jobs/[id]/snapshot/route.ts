@@ -25,6 +25,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
+  // Round 7.11: snapshots are a staff metrics feature.
+  if (session.role === 'briefer') {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
   const { id: jobId } = await params
 
   let body: unknown
@@ -149,6 +154,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  // Round 7.11: snapshots are a staff metrics feature.
+  if (session.role === 'briefer') {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
 
   const { id: jobId } = await params
   await ensureSchema()

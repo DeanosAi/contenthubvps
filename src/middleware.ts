@@ -9,20 +9,35 @@ import type { NextRequest } from 'next/server'
 // enough to redirect unauthenticated users to /login and prevent the
 // flash-of-protected-page on the way.
 //
-// Real cryptographic verification happens inside each API route and inside
-// the protected pages via `getSession()` from `src/lib/auth.ts` (which runs
-// in the Node runtime). So a forged or stale cookie will pass middleware
-// but fail at the API/route level — exactly the right defense layer.
+// Real cryptographic verification (and ROLE-based redirects, which are
+// new in Round 7.11) happen inside each API route and inside the
+// protected pages via `getSession()` from `src/lib/auth.ts` (which runs
+// in the Node runtime). So:
+//   - middleware: "is there ANY session cookie?" → if not, redirect/401
+//   - page-level: "is this session a briefer trying to access /app?"
+//     → server component does redirect to /briefer
+//   - api-level: "is this session allowed to do this thing?"
+//     → permission helpers in lib/permissions.ts decide
+//
+// Round 7.11 additions:
+//   - /briefer is now a protected prefix (briefer's home)
+//   - /api/auth/set-display-name added to PUBLIC_API_PREFIXES is WRONG
+//     — that endpoint REQUIRES a valid session — so it stays under
+//     PROTECTED_PREFIXES (specifically: anything under /api/auth that's
+//     not login/logout is protected)
 
 const PROTECTED_PREFIXES = [
   '/app',
   '/calendar',
   '/reports',
   '/settings',
+  '/briefer',
   '/api/workspaces',
   '/api/jobs',
   '/api/users',
   '/api/settings',
+  '/api/auth/me',
+  '/api/auth/set-display-name',
 ]
 
 const PUBLIC_API_PREFIXES = [
@@ -45,9 +60,6 @@ export function middleware(req: NextRequest) {
   )
   if (!isProtected) return NextResponse.next()
 
-  // Cookie presence check — the existence of a non-empty value is enough
-  // to let the request through. The downstream route then does the real
-  // jwt.verify() in Node.
   const token = req.cookies.get(SESSION_COOKIE)?.value
   if (token && token.length > 0) return NextResponse.next()
 
@@ -67,9 +79,12 @@ export const config = {
     '/calendar/:path*',
     '/reports/:path*',
     '/settings/:path*',
+    '/briefer/:path*',
     '/api/workspaces/:path*',
     '/api/jobs/:path*',
     '/api/users/:path*',
     '/api/settings/:path*',
+    '/api/auth/me',
+    '/api/auth/set-display-name',
   ],
 }

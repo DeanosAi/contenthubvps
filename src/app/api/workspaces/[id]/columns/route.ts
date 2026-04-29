@@ -4,6 +4,7 @@ import { randomUUID } from 'crypto'
 import { pool, ensureSchema, BUILTIN_COLUMN_DEFAULTS } from '@/lib/postgres'
 import { getSession } from '@/lib/auth'
 import { rowToKanbanColumn } from '@/lib/db-mappers'
+import { assertCanAccessWorkspace } from '@/lib/permissions'
 
 /**
  * Round 7.2: per-workspace kanban column configuration endpoints.
@@ -57,6 +58,12 @@ export async function GET(
     return NextResponse.json({ error: 'Workspace not found' }, { status: 404 })
   }
 
+  // Round 7.11: briefers can only read columns of their own workspace.
+  const accessCheck = assertCanAccessWorkspace(session, workspaceId)
+  if (!accessCheck.ok) {
+    return NextResponse.json({ error: accessCheck.error }, { status: accessCheck.status })
+  }
+
   const result = await pool.query(
     `SELECT id, workspace_id, stage_key, label, color, sort_order,
             is_builtin, created_at, updated_at
@@ -84,6 +91,12 @@ export async function POST(
 ) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  // Round 7.11: briefers cannot manage kanban columns even on
+  // their own workspace. Column config belongs to staff workflows.
+  if (session.role === 'briefer') {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
 
   await ensureSchema()
   const { id: workspaceId } = await params

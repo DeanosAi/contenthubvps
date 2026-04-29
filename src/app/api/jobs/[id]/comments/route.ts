@@ -4,33 +4,41 @@ import { randomUUID } from 'crypto'
 import { pool, ensureSchema } from '@/lib/postgres'
 import { getSession } from '@/lib/auth'
 import { rowToJobComment } from '@/lib/db-mappers'
+import { assertCanViewJob } from '@/lib/permissions'
 
 /**
- * Round 7.10 — job comments endpoints.
+ * Round 7.10 — job comments endpoints. Round 7.11 — workspace-scoped
+ * permissions plus display_name attribution.
  *
- * GET  /api/jobs/:id/comments        — list, oldest first (UI flips client-side if desired)
- * POST /api/jobs/:id/comments        — create a new comment as the current user
+ * GET  /api/jobs/:id/comments        — list, oldest first
+ * POST /api/jobs/:id/comments        — create as the current user
  *
- * Per-comment edit (PATCH body) and delete (DELETE) live in the sibling
- * [commentId]/route.ts file.
+ * Per-comment edit/delete live in the sibling [commentId]/route.ts file.
  *
- * Permission model:
- *   - Anyone authenticated can list / post comments on any job they
- *     can see. There's currently no per-workspace RBAC in this
- *     codebase, so this matches the broader access model.
- *   - The author_id of new comments comes from the session, not the
- *     request body — clients can't impersonate.
- *
- * The list endpoint JOINs against users to pull author display
- * fields (name, email) so the UI doesn't need a second round-trip
- * to render the thread. A comment whose author was later deleted
- * comes back with author_id NULL via the FK's ON DELETE SET NULL,
- * and the JOIN's LEFT OUTER ensures those still appear in the list.
+ * Round 7.11 changes:
+ *   - Briefers can only see/post comments on jobs in their own
+ *     workspace. Cross-workspace returns 404 (no leakage of the
+ *     other workspace's existence).
+ *   - Each comment captures display_name from the session at post
+ *     time. For staff this is their profile name. For briefers this
+ *     is the "who's using this venue account today" answer set via
+ *     the set-display-name endpoint.
+ *   - The list response includes author_role and display_name so
+ *     the UI can render "Tracy from Mt Druitt (briefer)" alongside
+ *     staff names.
  */
 
 const CreateCommentInput = z.object({
   body: z.string().trim().min(1, 'Comment body required').max(5000),
 })
+
+const COMMENT_SELECT = `
+  c.id, c.job_id, c.author_id, c.body, c.edited, c.display_name,
+  c.created_at, c.updated_at,
+  u.name  AS author_name,
+  u.email AS author_email,
+  u.role  AS author_role
+`
 
 export async function GET(
   _req: NextRequest,
@@ -42,23 +50,22 @@ export async function GET(
   await ensureSchema()
   const { id: jobId } = await params
 
-  // Verify the job exists. Without this an attacker could probe
-  // for valid job ids by counting how many comments are returned.
-  const jobRes = await pool.query<{ id: string }>(
-    `SELECT id FROM jobs WHERE id = $1`,
+  // Verify job exists AND check workspace access in one query.
+  const jobRes = await pool.query<{ id: string; workspace_id: string }>(
+    `SELECT id, workspace_id FROM jobs WHERE id = $1`,
     [jobId],
   )
   if (jobRes.rowCount === 0) {
     return NextResponse.json({ error: 'Job not found' }, { status: 404 })
   }
 
-  // LEFT JOIN so deleted-author comments still come back.
+  const accessCheck = assertCanViewJob(session, jobRes.rows[0].workspace_id)
+  if (!accessCheck.ok) {
+    return NextResponse.json({ error: accessCheck.error }, { status: accessCheck.status })
+  }
+
   const result = await pool.query(
-    `SELECT
-       c.id, c.job_id, c.author_id, c.body, c.edited,
-       c.created_at, c.updated_at,
-       u.name  AS author_name,
-       u.email AS author_email
+    `SELECT ${COMMENT_SELECT}
      FROM job_comments c
      LEFT JOIN users u ON u.id = c.author_id
      WHERE c.job_id = $1
@@ -94,30 +101,44 @@ export async function POST(
     )
   }
 
-  // Verify job exists before insert so the FK doesn't silently 500.
-  const jobRes = await pool.query<{ id: string }>(
-    `SELECT id FROM jobs WHERE id = $1`,
+  const jobRes = await pool.query<{ id: string; workspace_id: string }>(
+    `SELECT id, workspace_id FROM jobs WHERE id = $1`,
     [jobId],
   )
   if (jobRes.rowCount === 0) {
     return NextResponse.json({ error: 'Job not found' }, { status: 404 })
   }
 
+  const accessCheck = assertCanViewJob(session, jobRes.rows[0].workspace_id)
+  if (!accessCheck.ok) {
+    return NextResponse.json({ error: accessCheck.error }, { status: accessCheck.status })
+  }
+
+  // Round 7.11: snapshot display_name from session. Falls back to
+  // the user's profile name (computed by lookup) for staff who
+  // haven't set a session displayName explicitly. For briefers,
+  // displayName is the per-session "who are you" answer — null
+  // here only if the briefer hasn't been prompted yet, in which
+  // case the UI should have intercepted before posting.
+  let displayName = session.displayName?.trim() || null
+  if (!displayName) {
+    // Look up the user's profile name as fallback.
+    const profile = await pool.query<{ name: string | null }>(
+      `SELECT name FROM users WHERE id = $1`,
+      [session.userId],
+    )
+    displayName = profile.rows[0]?.name?.trim() || null
+  }
+
   const id = randomUUID()
   await pool.query(
-    `INSERT INTO job_comments (id, job_id, author_id, body)
-     VALUES ($1, $2, $3, $4)`,
-    [id, jobId, session.userId, parsed.data.body],
+    `INSERT INTO job_comments (id, job_id, author_id, body, display_name)
+     VALUES ($1, $2, $3, $4, $5)`,
+    [id, jobId, session.userId, parsed.data.body, displayName],
   )
 
-  // Return the freshly-created comment with author fields populated
-  // so the client can append it to its in-memory list without a refetch.
   const result = await pool.query(
-    `SELECT
-       c.id, c.job_id, c.author_id, c.body, c.edited,
-       c.created_at, c.updated_at,
-       u.name  AS author_name,
-       u.email AS author_email
+    `SELECT ${COMMENT_SELECT}
      FROM job_comments c
      LEFT JOIN users u ON u.id = c.author_id
      WHERE c.id = $1`,
