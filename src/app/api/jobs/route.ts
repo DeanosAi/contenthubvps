@@ -30,7 +30,11 @@ function normaliseContentTypes(arr: readonly string[] | undefined): string[] {
     out.push(trimmed)
   }
   // Sort by ALLOWED_JOB_TYPES order for canonical storage.
-  const order = new Map(ALLOWED_JOB_TYPES.map((v, i) => [v, i] as const))
+  // Map typed Map<string, number> rather than Map<JobType, number>
+  // so the Map.get(string) lookup compiles cleanly without a cast.
+  const order: Map<string, number> = new Map(
+    ALLOWED_JOB_TYPES.map((v, i) => [v as string, i])
+  )
   out.sort((a, b) => (order.get(a) ?? 0) - (order.get(b) ?? 0))
   return out
 }

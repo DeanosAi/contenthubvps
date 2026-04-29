@@ -55,7 +55,9 @@ function normaliseContentTypes(arr: readonly string[] | undefined): string[] {
     seen.add(trimmed)
     out.push(trimmed)
   }
-  const order = new Map(ALLOWED_JOB_TYPES.map((v, i) => [v, i] as const))
+  const order: Map<string, number> = new Map(
+    ALLOWED_JOB_TYPES.map((v, i) => [v as string, i])
+  )
   out.sort((a, b) => (order.get(a) ?? 0) - (order.get(b) ?? 0))
   return out
 }
