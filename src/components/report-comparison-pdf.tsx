@@ -494,9 +494,14 @@ function RankedTable({ report }: { report: ComparisonReport }) {
           </Text>
           <View style={{ flex: 3 }}>
             <Text style={styles.tableCell}>{truncatePdf(p.job.title, 60)}</Text>
-            {p.job.contentType || p.job.campaign ? (
+            {(p.job.contentTypes && p.job.contentTypes.length > 0) || p.job.campaign ? (
               <Text style={[styles.tableCellMuted, { fontSize: 8 }]}>
-                {[p.job.contentType, p.job.campaign].filter(Boolean).join(' · ')}
+                {[
+                  p.job.contentTypes && p.job.contentTypes.length > 0
+                    ? p.job.contentTypes.join(', ')
+                    : null,
+                  p.job.campaign,
+                ].filter(Boolean).join(' · ')}
               </Text>
             ) : null}
           </View>

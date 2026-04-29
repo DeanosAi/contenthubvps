@@ -17,6 +17,50 @@
  */
 export type JobStage = 'brief' | 'production' | 'ready' | 'posted' | 'archive'
 
+/**
+ * Round 7.12 — Type of Job allowed values.
+ *
+ * Each job can have zero or more of these types (multi-select).
+ * Used by the API to validate inputs, by the UI to render the
+ * checkbox picker, and by reports to bucket counts.
+ *
+ * Adding a new type here is the only change needed — UI, validation,
+ * and reports all read from this constant. Changing or removing a
+ * value would orphan any existing jobs that used it, so additions
+ * only please.
+ *
+ * "Other" is a deliberate escape hatch for jobs that don't fit
+ * cleanly. Reports surface "Other" as its own bucket so we can
+ * spot when it grows large enough to justify adding a new type.
+ */
+export const ALLOWED_JOB_TYPES = [
+  'Video',
+  'Graphic Design',
+  'Social Post',
+  'Website Update',
+  'Email Marketing',
+  'Print',
+  'Reports',
+  'Other',
+] as const
+
+export type JobType = (typeof ALLOWED_JOB_TYPES)[number]
+
+/**
+ * Help text shown alongside the picker, explaining what each
+ * value means. Keep these short — they fit in tooltip-style UI.
+ */
+export const JOB_TYPE_DESCRIPTIONS: Record<JobType, string> = {
+  'Video': 'Video production, editing, motion graphics',
+  'Graphic Design': 'Logos, posters, brochures, illustrations',
+  'Social Post': 'Content for Facebook, Instagram, TikTok, etc.',
+  'Website Update': 'Page edits, new pages, content changes',
+  'Email Marketing': 'Newsletters, EDMs, mailout content',
+  'Print': 'Flyers, posters, print collateral, signage',
+  'Reports': 'Analytics requests, data summaries, dashboards',
+  'Other': 'Doesn\'t fit any of the above',
+}
+
 export type ApprovalStatus = 'none' | 'awaiting' | 'approved' | 'changes_requested'
 
 /** A reference link attached to a job. URL-only by design — the hosted app
@@ -163,7 +207,23 @@ export interface Job {
   platform: string | null
   liveUrl: string | null
   notes: string | null
+  /**
+   * @deprecated Round 7.12: replaced by `contentTypes` (multi-select
+   * array). This field is no longer populated by new code, but kept
+   * in the type for compatibility with any client code that might
+   * still reference it. Always returned as null by the mapper now.
+   */
   contentType: string | null
+  /**
+   * Round 7.12: Type of Job — multi-select. Each value is one of
+   * ALLOWED_JOB_TYPES. Empty array means no types selected.
+   *
+   * A single job can have multiple types: a video that's also
+   * shared as a social post gets ['Video', 'Social Post']. The
+   * "Jobs by type" report counts each type-bucket independently
+   * (so this job adds +1 to both Video and Social Post counts).
+   */
+  contentTypes: string[]
   briefUrl: string | null
   assetLinks: AssetLink[]
   approvalStatus: ApprovalStatus

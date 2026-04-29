@@ -132,6 +132,32 @@ export async function ensureSchema(): Promise<void> {
   // briefer_display_name provides the WHO binding.
   await pool.query(`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS briefer_display_name TEXT;`)
 
+  // ---------- Round 7.12 — Type of Job (multi-select) ----------
+  // Replaces the free-text content_type with a constrained multi-
+  // select. Stored as Postgres TEXT[] so a single job can have
+  // multiple types (a "video that's also a social post" gets both).
+  //
+  // Allowed values are validated at the API layer (see
+  // ALLOWED_JOB_TYPES in lib/types.ts). The column itself is
+  // unconstrained TEXT[] — keeps schema flexible for adding new
+  // values without ALTER TABLE.
+  //
+  // The legacy `content_type TEXT` column is left in place but
+  // unused by application code. It can be dropped in a later
+  // round once we're confident nothing reads it.
+  //
+  // Default value: empty array (NOT NULL with DEFAULT '{}'). This
+  // means existing rows automatically get an empty array, no
+  // backfill required.
+  await pool.query(
+    `ALTER TABLE jobs ADD COLUMN IF NOT EXISTS content_types TEXT[] NOT NULL DEFAULT '{}'`
+  )
+  // Index on content_types for fast filtering. GIN is the right
+  // index for array containment queries (`'Video' = ANY(content_types)`).
+  await pool.query(
+    `CREATE INDEX IF NOT EXISTS jobs_content_types_gin_idx ON jobs USING GIN (content_types)`
+  )
+
   // ---------- Round 7.2: kanban_columns ----------
   // Per-workspace kanban column configuration. Lets users rename built-in
   // columns (e.g. "Posted" → "Posted/Live"), reorder them, and add

@@ -121,6 +121,28 @@ function mapApprovalStatus(v: unknown): ApprovalStatus {
   return (allowed as string[]).includes(s) ? (s as ApprovalStatus) : 'none'
 }
 
+/**
+ * Round 7.12 — map a Postgres TEXT[] column to string[].
+ *
+ * The pg driver decodes TEXT[] as a JS array, so this helper is
+ * mostly defensive: it ensures the result is an array of strings
+ * even if the column is null (legacy rows from before the
+ * migration), and filters out non-string entries defensively.
+ *
+ * We do NOT enforce that values are in ALLOWED_JOB_TYPES here —
+ * the API write path validates inputs at the gate. Reading what's
+ * already stored should be lenient so a value that was added then
+ * later removed from ALLOWED_JOB_TYPES still surfaces (and the
+ * reports breakdown can show it as a stray bucket).
+ */
+function mapContentTypes(raw: unknown): string[] {
+  if (raw == null) return []
+  if (!Array.isArray(raw)) return []
+  return raw
+    .map((v) => (typeof v === 'string' ? v : String(v ?? '')))
+    .filter((s) => s.length > 0)
+}
+
 export function mapLiveMetrics(raw: unknown): LiveMetrics | null {
   const parsed = parseJson<Record<string, unknown> | null>(raw, null)
   if (!parsed || typeof parsed !== 'object') return null
@@ -200,7 +222,11 @@ export function rowToJob(row: Row): Job {
     platform: asNullableString(row.platform),
     liveUrl: asNullableString(row.live_url),
     notes: asNullableString(row.notes),
-    contentType: asNullableString(row.content_type),
+    // Round 7.12: contentType is deprecated. The mapper returns
+    // null even if the legacy column has data — the active field
+    // is contentTypes (multi-select) below.
+    contentType: null,
+    contentTypes: mapContentTypes(row.content_types),
     briefUrl: asNullableString(row.brief_url),
     assetLinks: mapAssetLinks(row.asset_links_json),
     approvalStatus: mapApprovalStatus(row.approval_status),

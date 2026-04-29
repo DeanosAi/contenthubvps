@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { pool, ensureSchema } from '@/lib/postgres'
 import { getSession } from '@/lib/auth'
 import { rowToJob } from '@/lib/db-mappers'
+import { ALLOWED_JOB_TYPES } from '@/lib/types'
 import {
   assertCanViewJob,
   assertCanEditJobField,
@@ -34,7 +35,10 @@ const UpdateJobInput = z
     platform: z.string().nullable().optional(),
     liveUrl: z.string().nullable().optional(),
     notes: z.string().nullable().optional(),
+    // Round 7.12: contentType deprecated, contentTypes is the
+    // active multi-select field.
     contentType: z.string().nullable().optional(),
+    contentTypes: z.array(z.string()).optional(),
     briefUrl: z.string().nullable().optional(),
     assetLinks: z
       .array(z.object({ id: z.string(), label: z.string(), url: z.string() }))
@@ -54,7 +58,7 @@ const UpdateJobInput = z
 const COLUMN_LIST = `
   id, workspace_id, title, description, stage, priority, due_date,
   hashtags, platform, live_url, notes,
-  content_type, brief_url, asset_links_json, approval_status, assigned_to,
+  content_type, content_types, brief_url, asset_links_json, approval_status, assigned_to,
   custom_fields_json, campaign,
   facebook_live_url, facebook_post_id, instagram_live_url,
   posted_at, live_metrics_json, last_metrics_fetch_at,
@@ -73,6 +77,7 @@ const COLUMN_MAP: Record<string, string> = {
   liveUrl: 'live_url',
   notes: 'notes',
   contentType: 'content_type',
+  contentTypes: 'content_types',
   briefUrl: 'brief_url',
   assetLinks: 'asset_links_json',
   customFields: 'custom_fields_json',
@@ -91,6 +96,30 @@ function normaliseCampaign(v: string | null | undefined): string | null {
   if (v == null) return null
   const trimmed = v.trim()
   return trimmed.length > 0 ? trimmed : null
+}
+
+/**
+ * Round 7.12: validate, dedupe and canonicalise an incoming
+ * contentTypes array. Drops values not in ALLOWED_JOB_TYPES so
+ * stored data stays clean. Sorted by ALLOWED_JOB_TYPES order so
+ * audit-log diffs are stable (not "Video,Print" vs "Print,Video").
+ */
+function normaliseContentTypes(arr: readonly string[] | undefined): string[] {
+  if (!arr) return []
+  const allowed = new Set<string>(ALLOWED_JOB_TYPES as readonly string[])
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const v of arr) {
+    if (typeof v !== 'string') continue
+    const trimmed = v.trim()
+    if (!allowed.has(trimmed)) continue
+    if (seen.has(trimmed)) continue
+    seen.add(trimmed)
+    out.push(trimmed)
+  }
+  const order = new Map(ALLOWED_JOB_TYPES.map((v, i) => [v, i] as const))
+  out.sort((a, b) => (order.get(a) ?? 0) - (order.get(b) ?? 0))
+  return out
 }
 
 /**
@@ -180,6 +209,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         newDbValue = v == null ? null : JSON.stringify(v)
       } else if (k === 'campaign') {
         newDbValue = normaliseCampaign(v as string | null | undefined)
+      } else if (k === 'contentTypes') {
+        // Round 7.12: canonicalise + validate. The pg driver will
+        // serialise the resulting JS string[] as PG TEXT[].
+        newDbValue = normaliseContentTypes(v as readonly string[] | undefined)
       } else {
         newDbValue = v
       }
@@ -188,10 +221,22 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       values.push(newDbValue)
 
       if (!JSONB_KEYS.has(k)) {
-        const oldStr = valueForAudit(beforeRow[col])
-        const newStr = valueForAudit(
-          k === 'dueDate' ? (newDbValue as Date | null)?.toISOString() ?? null : newDbValue
-        )
+        // For audit log comparison, render arrays as a stable
+        // comma-joined string so old/new values are comparable.
+        // Other fields just stringify directly.
+        let oldStr: string | null
+        let newStr: string | null
+        if (k === 'contentTypes') {
+          const oldArr = Array.isArray(beforeRow[col]) ? (beforeRow[col] as unknown[]) : []
+          oldStr = oldArr.length === 0 ? null : oldArr.join(', ')
+          const newArr = Array.isArray(newDbValue) ? (newDbValue as string[]) : []
+          newStr = newArr.length === 0 ? null : newArr.join(', ')
+        } else {
+          oldStr = valueForAudit(beforeRow[col])
+          newStr = valueForAudit(
+            k === 'dueDate' ? (newDbValue as Date | null)?.toISOString() ?? null : newDbValue
+          )
+        }
         if (oldStr !== newStr) {
           audit.push({ fieldName: col, oldValue: oldStr, newValue: newStr })
         }

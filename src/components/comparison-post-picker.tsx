@@ -206,7 +206,9 @@ export function ComparisonPostPicker({
                   <div className="flex items-center gap-3 flex-wrap text-xs text-slate-600 mt-0.5">
                     {j.postedAt && <span>{formatPostedDate(j.postedAt)}</span>}
                     {j.platform && <span className="capitalize">{j.platform}</span>}
-                    {j.contentType && <span>{j.contentType}</span>}
+                    {j.contentTypes && j.contentTypes.length > 0 && (
+                      <span>{j.contentTypes.join(', ')}</span>
+                    )}
                     {j.campaign && (
                       <span className="rounded-full bg-indigo-600/10 text-indigo-700 px-1.5 py-0.5">
                         {j.campaign}

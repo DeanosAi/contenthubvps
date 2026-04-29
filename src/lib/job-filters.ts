@@ -15,6 +15,22 @@ export type SortKey =
   | 'priorityAsc'
   | 'recentlyUpdated'
 
+/**
+ * Round 7.12: special sentinel value for the assignedTo filter that
+ * means "show only jobs with no one assigned." Stored as a string
+ * (not null) so the filter state stays a flat object and doesn't
+ * need a discriminated union. The picked sentinel is unlikely to
+ * collide with any real user id (no UUID would ever be this value).
+ *
+ * Use the helper `isUnassignedFilter()` rather than comparing the
+ * literal — keeps the magic-string contained.
+ */
+export const ASSIGNED_TO_UNASSIGNED = '__unassigned__'
+
+export function isUnassignedFilter(v: string): boolean {
+  return v === ASSIGNED_TO_UNASSIGNED
+}
+
 export interface JobFilterState {
   keyword: string
   /** Round 7.2b: widened from `JobStage | ''` to `string` so custom
@@ -28,11 +44,21 @@ export interface JobFilterState {
   dueTo: string | null
   /** When true, jobs in the `archive` stage are hidden unless `stage === 'archive'`. */
   hideArchived: boolean
+  /**
+   * Round 7.12: '' = no filter, ASSIGNED_TO_UNASSIGNED = unassigned only,
+   * any other string = a specific user id.
+   */
   assignedTo: string | ''
   /** Approval status filter. Empty string = no filter. Added in Round 5
    * so the dashboard "Awaiting approval" widget can apply a precise
    * filter rather than just clearing all filters. */
   approvalStatus: ApprovalStatus | ''
+  /**
+   * Round 7.12: filter by Type of Job. Single-select — pick one type
+   * and see all jobs that include it (since jobs can have multiple
+   * types). Empty string = no filter.
+   */
+  contentType: string | ''
 }
 
 export const DEFAULT_FILTER_STATE: JobFilterState = {
@@ -45,6 +71,7 @@ export const DEFAULT_FILTER_STATE: JobFilterState = {
   hideArchived: true,
   assignedTo: '',
   approvalStatus: '',
+  contentType: '',
 }
 
 /** Lower bound of a date filter — start of day in local time, returned as ms. */
@@ -78,15 +105,35 @@ export function applyJobFilters(jobs: Job[], filter: JobFilterState): Job[] {
 
     if (kw) {
       // Concat searchable fields once and check substring. Cheap, no regex.
-      const haystack = `${job.title} ${job.description ?? ''} ${job.hashtags ?? ''} ${job.notes ?? ''} ${job.contentType ?? ''}`.toLowerCase()
+      // Round 7.12: contentTypes joined into haystack so search
+      // matches "Video" / "Graphic Design" etc.
+      const types = (job.contentTypes ?? []).join(' ')
+      const haystack = `${job.title} ${job.description ?? ''} ${job.hashtags ?? ''} ${job.notes ?? ''} ${types}`.toLowerCase()
       if (!haystack.includes(kw)) return false
     }
 
     if (filter.stage && job.stage !== filter.stage) return false
     if (filter.platform && job.platform !== filter.platform) return false
     if (filter.priorityMin != null && job.priority < filter.priorityMin) return false
-    if (filter.assignedTo && job.assignedTo !== filter.assignedTo) return false
+
+    // Round 7.12: Unassigned filter is a sentinel; a normal user id
+    // matches by equality. Empty string = no filter.
+    if (filter.assignedTo) {
+      if (isUnassignedFilter(filter.assignedTo)) {
+        if (job.assignedTo) return false
+      } else {
+        if (job.assignedTo !== filter.assignedTo) return false
+      }
+    }
+
     if (filter.approvalStatus && job.approvalStatus !== filter.approvalStatus) return false
+
+    // Round 7.12: contentType filter matches if the selected type is
+    // ONE OF the job's types. Job with ['Video', 'Social Post']
+    // matches filter='Video' AND filter='Social Post'.
+    if (filter.contentType) {
+      if (!(job.contentTypes ?? []).includes(filter.contentType)) return false
+    }
 
     if (fromMs != null || toMs != null) {
       if (!job.dueDate) return false
@@ -155,6 +202,7 @@ export function hasActiveFilters(filter: JobFilterState): boolean {
     filter.dueFrom != null ||
     filter.dueTo != null ||
     filter.assignedTo !== '' ||
-    filter.approvalStatus !== ''
+    filter.approvalStatus !== '' ||
+    filter.contentType !== ''
   )
 }

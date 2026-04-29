@@ -4,10 +4,36 @@ import { randomUUID } from 'crypto'
 import { pool, ensureSchema } from '@/lib/postgres'
 import { getSession } from '@/lib/auth'
 import { rowToJob } from '@/lib/db-mappers'
+import { ALLOWED_JOB_TYPES } from '@/lib/types'
 
 const STAGES = ['brief', 'production', 'ready', 'posted', 'archive'] as const
 const APPROVAL = ['none', 'awaiting', 'approved', 'changes_requested'] as const
 const FIELD_TYPES = ['text', 'textarea', 'number', 'date', 'url'] as const
+
+/**
+ * Round 7.12: validate and de-dupe an incoming contentTypes array.
+ * Drops any value not in ALLOWED_JOB_TYPES (silently — caller can
+ * see what was kept by reading the saved row back). Sorts and dedupes
+ * so the stored array is canonical for cleaner diffs in the audit log.
+ */
+function normaliseContentTypes(arr: readonly string[] | undefined): string[] {
+  if (!arr) return []
+  const allowed = new Set<string>(ALLOWED_JOB_TYPES as readonly string[])
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const v of arr) {
+    if (typeof v !== 'string') continue
+    const trimmed = v.trim()
+    if (!allowed.has(trimmed)) continue
+    if (seen.has(trimmed)) continue
+    seen.add(trimmed)
+    out.push(trimmed)
+  }
+  // Sort by ALLOWED_JOB_TYPES order for canonical storage.
+  const order = new Map(ALLOWED_JOB_TYPES.map((v, i) => [v, i] as const))
+  out.sort((a, b) => (order.get(a) ?? 0) - (order.get(b) ?? 0))
+  return out
+}
 
 /** Normalise a free-text campaign value: trim whitespace, treat empty
  * string as null. Prevents "Spring Launch" and "Spring Launch " from
@@ -37,7 +63,11 @@ const CreateJobInput = z.object({
   platform: z.string().nullable().optional(),
   liveUrl: z.string().nullable().optional(),
   notes: z.string().nullable().optional(),
+  // Round 7.12: contentType is deprecated. New code should use
+  // contentTypes (array). We still accept contentType in the
+  // input for backwards compat with any old clients but ignore it.
   contentType: z.string().nullable().optional(),
+  contentTypes: z.array(z.string()).optional(),
   briefUrl: z.string().nullable().optional(),
   assetLinks: z
     .array(z.object({ id: z.string(), label: z.string(), url: z.string() }))
@@ -53,10 +83,11 @@ const CreateJobInput = z.object({
 // Includes Round 4.1 additions: posted_at, live_metrics_json, last_metrics_fetch_at.
 // Round 6.1: campaign.
 // Round 7.11: briefer_display_name (briefer attribution).
+// Round 7.12: content_types (multi-select Type of Job).
 const COLUMN_LIST = `
   id, workspace_id, title, description, stage, priority, due_date,
   hashtags, platform, live_url, notes,
-  content_type, brief_url, asset_links_json, approval_status, assigned_to,
+  content_type, content_types, brief_url, asset_links_json, approval_status, assigned_to,
   custom_fields_json, campaign,
   facebook_live_url, facebook_post_id, instagram_live_url,
   posted_at, live_metrics_json, last_metrics_fetch_at,
@@ -154,17 +185,17 @@ export async function POST(req: NextRequest) {
     `INSERT INTO jobs (
       id, workspace_id, title, description, stage, priority, due_date,
       hashtags, platform, live_url, notes,
-      content_type, brief_url, asset_links_json, approval_status, assigned_to,
+      content_type, content_types, brief_url, asset_links_json, approval_status, assigned_to,
       custom_fields_json, campaign,
       facebook_live_url, instagram_live_url,
       posted_at
     ) VALUES (
       $1, $2, $3, $4, $5, $6, $7,
       $8, $9, $10, $11,
-      $12, $13, $14, $15, $16,
-      $17, $18,
-      $19, $20,
-      $21
+      $12, $13, $14, $15, $16, $17,
+      $18, $19,
+      $20, $21,
+      $22
     )`,
     [
       id,
@@ -178,15 +209,17 @@ export async function POST(req: NextRequest) {
       parsed.data.platform ?? null,
       parsed.data.liveUrl ?? null,
       parsed.data.notes ?? null,
-      parsed.data.contentType ?? null,
+      // Round 7.12: legacy content_type left null on inserts. The
+      // active field is content_types below.
+      null,
+      // pg driver natively converts JS string[] to TEXT[]. Validate
+      // and canonicalise via normaliseContentTypes first.
+      normaliseContentTypes(parsed.data.contentTypes),
       parsed.data.briefUrl ?? null,
       parsed.data.assetLinks ? JSON.stringify(parsed.data.assetLinks) : null,
       parsed.data.approvalStatus ?? 'none',
       parsed.data.assignedTo ?? null,
       parsed.data.customFields ? JSON.stringify(parsed.data.customFields) : null,
-      // Trim whitespace + treat empty string as null. We don't want
-      // "Spring Launch" and "Spring Launch " counted as different campaigns
-      // because of trailing whitespace from a copy/paste.
       normaliseCampaign(parsed.data.campaign),
       parsed.data.facebookLiveUrl ?? null,
       parsed.data.instagramLiveUrl ?? null,

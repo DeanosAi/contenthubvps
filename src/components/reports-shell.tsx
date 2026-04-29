@@ -7,6 +7,7 @@ import { ReportsHeadline } from '@/components/reports-headline'
 import { ReportsCharts } from '@/components/reports-charts'
 import { ReportsPlatformTable } from '@/components/reports-platform-table'
 import { ReportsTopPosts } from '@/components/reports-top-posts'
+import { ReportsJobsByType } from '@/components/reports-jobs-by-type'
 import { ReportsDeepDiveSummary } from '@/components/reports-deep-dive-summary'
 import { ReportsDeepDiveMonthlyChart } from '@/components/reports-deep-dive-monthly'
 import { ReportsDeepDivePlatformTable } from '@/components/reports-deep-dive-platforms'
@@ -19,6 +20,7 @@ import {
   buildDailyTimeSeries,
   computeHeadlineNumbers,
   computePlatformBreakdown,
+  computeJobTypeBreakdown,
   defaultRange,
   jobsInScope,
   snapshotsInScope,
@@ -35,6 +37,12 @@ import {
 interface ReportsApiResponse {
   workspace: Workspace | null
   jobs: Job[]
+  /**
+   * Round 7.12: ALL jobs in date range (not just posted), used for
+   * the "Jobs by Type" breakdown. Anchored on created_at so design
+   * jobs and other non-posting work types appear in counts.
+   */
+  allJobsInRange?: Job[]
   snapshots: MetricSnapshot[]
   range: { from: string | null; to: string | null }
 }
@@ -219,6 +227,25 @@ export function ReportsShell() {
   const inScopeSnaps = useMemo(
     () => (data ? snapshotsInScope(data.snapshots, scope) : []),
     [data, scope],
+  )
+
+  /**
+   * Round 7.12: in-scope ALL jobs (not just posted). Used for the
+   * Jobs by Type breakdown which counts ALL work done in the range,
+   * including in-progress and never-posted jobs (design, reports,
+   * website updates).
+   *
+   * jobsInScope() filters by posted_at; we want a broader slice
+   * here. The API already returns allJobsInRange filtered to the
+   * date range and workspace, so we use it directly.
+   */
+  const inScopeAllJobs = useMemo(
+    () => data?.allJobsInRange ?? [],
+    [data],
+  )
+  const jobTypeRows = useMemo(
+    () => computeJobTypeBreakdown(inScopeAllJobs),
+    [inScopeAllJobs],
   )
 
   const headline = useMemo(() => computeHeadlineNumbers(inScopeJobs), [inScopeJobs])
@@ -494,6 +521,16 @@ export function ReportsShell() {
                 Platform breakdown
               </h2>
               <ReportsPlatformTable rows={platformRows} />
+            </section>
+
+            <section className="space-y-2">
+              <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-600">
+                Jobs by Type
+              </h2>
+              <ReportsJobsByType
+                rows={jobTypeRows}
+                totalJobs={inScopeAllJobs.length}
+              />
             </section>
 
             <section className="space-y-2">

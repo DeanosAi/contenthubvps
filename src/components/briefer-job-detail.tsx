@@ -5,6 +5,7 @@ import Link from 'next/link'
 import type { Job, AssetLink } from '@/lib/types'
 import { CommentsThread } from './comments-thread'
 import { BrieferEditHistoryButton } from './briefer-edit-history-button'
+import { JobTypePicker } from './job-type-picker'
 
 /**
  * Round 7.11 — briefer's view of one of their jobs.
@@ -42,7 +43,7 @@ const FIELD_LABELS: Record<string, string> = {
   due_date: 'Due date',
   hashtags: 'Hashtags',
   platform: 'Platform',
-  content_type: 'Content type',
+  content_types: 'Type of Job',
   campaign: 'Campaign',
 }
 
@@ -100,7 +101,7 @@ export function BrieferJobDetail({ jobId }: { jobId: string }) {
     dueDate: string
     hashtags: string
     platform: string
-    contentType: string
+    contentTypes: string[]
     campaign: string
   }>({
     title: '',
@@ -108,7 +109,7 @@ export function BrieferJobDetail({ jobId }: { jobId: string }) {
     dueDate: '',
     hashtags: '',
     platform: '',
-    contentType: '',
+    contentTypes: [],
     campaign: '',
   })
   const [saving, setSaving] = useState(false)
@@ -126,7 +127,7 @@ export function BrieferJobDetail({ jobId }: { jobId: string }) {
       dueDate: formatDateForInput(j.dueDate),
       hashtags: j.hashtags ?? '',
       platform: j.platform ?? '',
-      contentType: j.contentType ?? '',
+      contentTypes: [...(j.contentTypes ?? [])],
       campaign: j.campaign ?? '',
     })
   }
@@ -162,13 +163,22 @@ export function BrieferJobDetail({ jobId }: { jobId: string }) {
   // Compute dirty state per field
   const dirty = useMemo(() => {
     if (!job) return false
+    // Round 7.12: compare contentTypes arrays element-wise.
+    // Both arrays have already been canonicalised by normalisation
+    // before reaching here (server returns sorted arrays from
+    // normaliseContentTypes), so a simple equality check works.
+    const jobTypes = job.contentTypes ?? []
+    const formTypes = form.contentTypes ?? []
+    const typesDiffer =
+      jobTypes.length !== formTypes.length ||
+      jobTypes.some((v, i) => v !== formTypes[i])
     return (
       form.title !== job.title ||
       form.description !== (job.description ?? '') ||
       form.dueDate !== formatDateForInput(job.dueDate) ||
       form.hashtags !== (job.hashtags ?? '') ||
       form.platform !== (job.platform ?? '') ||
-      form.contentType !== (job.contentType ?? '') ||
+      typesDiffer ||
       form.campaign !== (job.campaign ?? '')
     )
   }, [form, job])
@@ -189,7 +199,15 @@ export function BrieferJobDetail({ jobId }: { jobId: string }) {
       }
       if (form.hashtags !== (job.hashtags ?? '')) payload.hashtags = form.hashtags.trim() || null
       if (form.platform !== (job.platform ?? '')) payload.platform = form.platform.trim() || null
-      if (form.contentType !== (job.contentType ?? '')) payload.contentType = form.contentType.trim() || null
+      // Round 7.12: contentTypes is an array — always send if changed.
+      const jobTypesForCompare = job.contentTypes ?? []
+      const formTypesForCompare = form.contentTypes ?? []
+      if (
+        jobTypesForCompare.length !== formTypesForCompare.length ||
+        jobTypesForCompare.some((v, i) => v !== formTypesForCompare[i])
+      ) {
+        payload.contentTypes = formTypesForCompare
+      }
       if (form.campaign !== (job.campaign ?? '')) payload.campaign = form.campaign.trim() || null
 
       const res = await fetch(`/api/jobs/${encodeURIComponent(jobId)}`, {
@@ -369,13 +387,13 @@ export function BrieferJobDetail({ jobId }: { jobId: string }) {
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:border-indigo-500"
             />
           </Field>
-          <Field label="Content type">
-            <input
-              type="text"
-              value={form.contentType}
-              onChange={(e) => setForm({ ...form, contentType: e.target.value })}
-              placeholder="e.g. Reel, post, story"
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:border-indigo-500"
+          <Field label="Type of Job">
+            <p className="text-[11px] text-slate-500 -mt-1 mb-1">
+              What kind of job is this? Pick one or more.
+            </p>
+            <JobTypePicker
+              value={form.contentTypes}
+              onChange={(types) => setForm({ ...form, contentTypes: types })}
             />
           </Field>
           <Field label="Campaign">

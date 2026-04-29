@@ -8,6 +8,7 @@ import { CustomFieldsEditor } from './custom-fields-editor'
 import { CampaignField } from './campaign-field'
 import { CommentsThread } from './comments-thread'
 import { BrieferEditHistoryButton } from './briefer-edit-history-button'
+import { JobTypePicker } from './job-type-picker'
 
 const APPROVALS: { value: ApprovalStatus; label: string; tone: string }[] = [
   { value: 'none', label: 'No approval needed', tone: 'text-slate-600' },
@@ -30,7 +31,7 @@ type Editable = Pick<
   | 'platform'
   | 'liveUrl'
   | 'notes'
-  | 'contentType'
+  | 'contentTypes'
   | 'briefUrl'
   | 'assetLinks'
   | 'customFields'
@@ -113,7 +114,7 @@ export function JobDetailPanel({
       platform: form.platform,
       liveUrl: form.liveUrl,
       notes: form.notes,
-      contentType: form.contentType,
+      contentTypes: form.contentTypes,
       briefUrl: form.briefUrl,
       assetLinks: form.assetLinks,
       customFields: form.customFields,
@@ -309,12 +310,13 @@ export function JobDetailPanel({
               />
             </div>
             <div>
-              <label className="text-xs text-slate-600">Content type</label>
-              <input
-                className="mt-1 w-full rounded-lg border bg-transparent px-3 py-2 text-sm"
-                value={form.contentType ?? ''}
-                onChange={(e) => patch('contentType', e.target.value || null)}
-                placeholder="reel, carousel, story…"
+              <label className="text-xs text-slate-600">Type of Job</label>
+              <p className="text-[11px] text-slate-500 mb-1">
+                What kind of job is this? Used to track how much of each type we do.
+              </p>
+              <JobTypePicker
+                value={form.contentTypes ?? []}
+                onChange={(types) => patch('contentTypes', types)}
               />
             </div>
             <div>

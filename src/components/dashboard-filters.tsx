@@ -1,8 +1,14 @@
 "use client"
 
 import type { JobFilterState, SortKey } from '@/lib/job-filters'
-import { DEFAULT_FILTER_STATE, hasActiveFilters } from '@/lib/job-filters'
+import {
+  DEFAULT_FILTER_STATE,
+  hasActiveFilters,
+  ASSIGNED_TO_UNASSIGNED,
+} from '@/lib/job-filters'
 import type { ApprovalStatus, KanbanColumn } from '@/lib/types'
+import { ALLOWED_JOB_TYPES } from '@/lib/types'
+import { useUsers } from '@/lib/use-users'
 
 const PLATFORMS = ['instagram', 'facebook', 'tiktok', 'youtube']
 
@@ -29,8 +35,13 @@ const SORT_OPTIONS: { value: SortKey; label: string }[] = [
  * the built-ins. The values stored in JobFilterState.stage match the
  * stage_key strings used in jobs.stage.
  *
- * Round 7.1.x: hardcoded slate colours so the filter bar reads
- * correctly on the light theme regardless of CSS variable state.
+ * Round 7.12 additions:
+ *   - Assignee dropdown — first option is "Unassigned" (sentinel
+ *     value ASSIGNED_TO_UNASSIGNED), then each team member by name
+ *   - Type of Job dropdown — single-select filter; pick one type
+ *     and see all jobs that include it (since jobs can have
+ *     multiple types). Briefers don't see this filter (they don't
+ *     see this component at all).
  */
 export function DashboardFilters({
   filter,
@@ -47,6 +58,9 @@ export function DashboardFilters({
   columns: KanbanColumn[]
 }) {
   const active = hasActiveFilters(filter)
+  // Round 7.12: pull team members for the assignee dropdown.
+  // The slim user list — id + name + email — is what we need.
+  const { users } = useUsers()
 
   function patch(next: Partial<JobFilterState>) {
     setFilter({ ...filter, ...next })
@@ -100,7 +114,40 @@ export function DashboardFilters({
           ))}
         </select>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3 items-end">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-3 items-end">
+        {/* Round 7.12: Assignee dropdown with Unassigned option */}
+        <label className="flex flex-col gap-1 text-xs text-slate-600">
+          Assignee
+          <select
+            className={inputClass}
+            value={filter.assignedTo}
+            onChange={(e) => patch({ assignedTo: e.target.value })}
+          >
+            <option value="">Anyone</option>
+            <option value={ASSIGNED_TO_UNASSIGNED}>Unassigned</option>
+            {users.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.name || u.email}
+              </option>
+            ))}
+          </select>
+        </label>
+        {/* Round 7.12: Type of Job filter */}
+        <label className="flex flex-col gap-1 text-xs text-slate-600">
+          Type of Job
+          <select
+            className={inputClass}
+            value={filter.contentType}
+            onChange={(e) => patch({ contentType: e.target.value })}
+          >
+            <option value="">Any type</option>
+            {ALLOWED_JOB_TYPES.map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
+          </select>
+        </label>
         <label className="flex flex-col gap-1 text-xs text-slate-600">
           Min priority
           <select
@@ -155,25 +202,25 @@ export function DashboardFilters({
             onChange={(e) => patch({ dueTo: e.target.value || null })}
           />
         </label>
-        <div className="flex items-center justify-end gap-3">
-          <label className="flex items-center gap-2 text-xs text-slate-600">
-            <input
-              type="checkbox"
-              checked={filter.hideArchived}
-              onChange={(e) => patch({ hideArchived: e.target.checked })}
-            />
-            Hide archived
-          </label>
-          {active && (
-            <button
-              type="button"
-              className="text-xs text-indigo-700 hover:underline"
-              onClick={() => setFilter(DEFAULT_FILTER_STATE)}
-            >
-              Clear filters
-            </button>
-          )}
-        </div>
+      </div>
+      <div className="flex items-center justify-end gap-3">
+        <label className="flex items-center gap-2 text-xs text-slate-600">
+          <input
+            type="checkbox"
+            checked={filter.hideArchived}
+            onChange={(e) => patch({ hideArchived: e.target.checked })}
+          />
+          Hide archived
+        </label>
+        {active && (
+          <button
+            type="button"
+            className="text-xs text-indigo-700 hover:underline"
+            onClick={() => setFilter(DEFAULT_FILTER_STATE)}
+          >
+            Clear filters
+          </button>
+        )}
       </div>
     </div>
   )

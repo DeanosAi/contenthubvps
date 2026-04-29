@@ -3,9 +3,11 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { JobTypePicker } from './job-type-picker'
 
 /**
  * Round 7.11 — briefer brief submission form.
+ * Round 7.12 — Type of Job is now multi-select via JobTypePicker.
  *
  * Posts to /api/jobs/brief-submit, which forces:
  *   - workspace_id = the briefer's own workspace
@@ -38,7 +40,8 @@ export function BriefSubmitForm() {
   const [dueDate, setDueDate] = useState('')
   const [hashtags, setHashtags] = useState('')
   const [platform, setPlatform] = useState('')
-  const [contentType, setContentType] = useState('')
+  // Round 7.12: contentTypes is now a multi-select array.
+  const [contentTypes, setContentTypes] = useState<string[]>([])
   const [campaign, setCampaign] = useState('')
 
   const [submitting, setSubmitting] = useState(false)
@@ -78,7 +81,7 @@ export function BriefSubmitForm() {
             : null,
           hashtags: hashtags.trim() || null,
           platform: platform.trim() || null,
-          contentType: contentType.trim() || null,
+          contentTypes,
           campaign: campaign.trim() || null,
         }),
       })
@@ -173,13 +176,13 @@ export function BriefSubmitForm() {
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:border-indigo-500"
             />
           </Field>
-          <Field label="Content type">
-            <input
-              type="text"
-              value={contentType}
-              onChange={(e) => setContentType(e.target.value)}
-              placeholder="e.g. Reel, post, story, video"
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:border-indigo-500"
+          <Field label="Type of Job">
+            <p className="text-[11px] text-slate-500 -mt-1 mb-1">
+              What kind of job is this? Pick one or more.
+            </p>
+            <JobTypePicker
+              value={contentTypes}
+              onChange={setContentTypes}
             />
           </Field>
           <Field label="Campaign">

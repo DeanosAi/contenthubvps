@@ -172,8 +172,42 @@ export function platformBreakdown(posts: ComparisonPost[]): FeatureBreakdownRow[
   return breakdownBy(posts, (p) => p.job.platform)
 }
 
+/**
+ * Round 7.12: contentTypes is multi-select, so each post can belong
+ * to multiple buckets. We expand here: a post with ['Video','Social Post']
+ * counts in BOTH buckets. Engagement is also counted in both — which
+ * means total-engagement across buckets can exceed total engagement.
+ * That's the right read for "which type performs better" since the work
+ * really did serve both purposes.
+ */
 export function contentTypeBreakdown(posts: ComparisonPost[]): FeatureBreakdownRow[] {
-  return breakdownBy(posts, (p) => p.job.contentType)
+  const withMetrics = posts.filter((p) => p.hasMetrics)
+  const totalEng = withMetrics.reduce((sum, p) => sum + p.engagement, 0)
+  if (withMetrics.length === 0) return []
+
+  const buckets = new Map<string, ComparisonPost[]>()
+  for (const p of withMetrics) {
+    const types = p.job.contentTypes ?? []
+    if (types.length === 0) continue
+    for (const t of types) {
+      const arr = buckets.get(t) ?? []
+      arr.push(p)
+      buckets.set(t, arr)
+    }
+  }
+  const rows: FeatureBreakdownRow[] = []
+  for (const [value, group] of buckets) {
+    const eng = group.reduce((sum, p) => sum + p.engagement, 0)
+    rows.push({
+      value,
+      postsCount: group.length,
+      totalEngagement: eng,
+      meanEngagement: eng / group.length,
+      shareOfEngagement: totalEng > 0 ? eng / totalEng : 0,
+    })
+  }
+  rows.sort((a, b) => b.totalEngagement - a.totalEngagement)
+  return rows
 }
 
 const WEEKDAY_NAMES = [

@@ -438,6 +438,24 @@ export function AppShell() {
       : jobs
   }, [jobs, selectedWorkspaceId])
 
+  /**
+   * Round 7.12: archive count for the kanban header. We want this to
+   * always reflect the actual count of archived jobs in the workspace,
+   * even when the user has "Hide archived" toggled on — because the
+   * point of the header count is "how many archived jobs are in this
+   * workspace" not "how many archived jobs are currently visible."
+   *
+   * We DO still respect other filters though, so a user filtering
+   * by assignee=Alice sees Alice's archived count specifically.
+   * Only `hideArchived` is overridden.
+   */
+  const archiveTrueCount = useMemo(() => {
+    const filterWithoutHideArchived = { ...filter, hideArchived: false, stage: '' }
+    return applyJobView(workspaceJobs, filterWithoutHideArchived, sort).filter(
+      (j) => j.stage === 'archive'
+    ).length
+  }, [workspaceJobs, filter, sort])
+
   const activeWorkspace = workspaces.find((w) => w.id === selectedWorkspaceId)
 
   // ---------- render ----------
@@ -604,6 +622,7 @@ export function AppShell() {
               columns={columns}
               onSelectJob={setSelectedJob}
               onMoveJob={moveJob}
+              archiveTrueCount={archiveTrueCount}
             />
           ) : (
             <JobListView

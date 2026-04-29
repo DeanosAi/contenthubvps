@@ -109,7 +109,9 @@ export function ComparisonTable({ posts }: { posts: ComparisonPost[] }) {
               <td className="px-4 py-3 max-w-md">
                 <div className="font-medium truncate">{p.job.title}</div>
                 <div className="flex items-center gap-2 text-xs text-slate-600 mt-0.5">
-                  {p.job.contentType && <span>{p.job.contentType}</span>}
+                  {p.job.contentTypes && p.job.contentTypes.length > 0 && (
+                    <span>{p.job.contentTypes.join(', ')}</span>
+                  )}
                   {p.job.campaign && (
                     <span className="rounded-full bg-indigo-600/10 text-indigo-700 px-1.5 py-0.5">
                       {p.job.campaign}

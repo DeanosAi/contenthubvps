@@ -32,10 +32,11 @@ const QuerySchema = z.object({
 const JOB_COLUMNS = `
   id, workspace_id, title, description, stage, priority, due_date,
   hashtags, platform, live_url, notes,
-  content_type, brief_url, asset_links_json, approval_status, assigned_to,
-  custom_fields_json,
+  content_type, content_types, brief_url, asset_links_json, approval_status, assigned_to,
+  custom_fields_json, campaign,
   facebook_live_url, facebook_post_id, instagram_live_url,
   posted_at, live_metrics_json, last_metrics_fetch_at,
+  briefer_display_name,
   created_at, updated_at
 `
 
@@ -116,6 +117,40 @@ export async function GET(req: NextRequest) {
   )
   const jobs = jobsRes.rows.map(rowToJob)
 
+  // ---- Round 7.12: All jobs in range (not just posted) ----
+  // For the "Jobs by Type" breakdown we want to count ALL work
+  // done in the range, including in-progress jobs and jobs that
+  // never get a "posted" status (e.g. design jobs, reports, website
+  // updates). Date anchor is created_at — when was the brief
+  // submitted/job created.
+  //
+  // We deliberately keep this as a separate query rather than
+  // expanding the main `jobs` query: every other report metric
+  // (headline, top posts, time series, etc.) is keyed on
+  // posted_at and shouldn't change.
+  const allJobsConditions: string[] = []
+  const allJobsValues: unknown[] = []
+  if (workspaceId) {
+    allJobsConditions.push(`workspace_id = $${allJobsValues.length + 1}`)
+    allJobsValues.push(workspaceId)
+  }
+  if (fromDate) {
+    allJobsConditions.push(`created_at >= $${allJobsValues.length + 1}`)
+    allJobsValues.push(fromDate)
+  }
+  if (toDateExclusive) {
+    allJobsConditions.push(`created_at < $${allJobsValues.length + 1}`)
+    allJobsValues.push(toDateExclusive)
+  }
+  const allJobsWhere = allJobsConditions.length
+    ? `WHERE ${allJobsConditions.join(' AND ')}`
+    : ''
+  const allJobsRes = await pool.query(
+    `SELECT ${JOB_COLUMNS} FROM jobs ${allJobsWhere} ORDER BY created_at DESC`,
+    allJobsValues
+  )
+  const allJobsInRange = allJobsRes.rows.map(rowToJob)
+
   // ---- Snapshots: within range, scoped if a workspace was given ----
   const snapConditions: string[] = []
   const snapValues: unknown[] = []
@@ -141,6 +176,7 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({
     workspace,
     jobs,
+    allJobsInRange,
     snapshots,
     range: {
       from: from ?? null,

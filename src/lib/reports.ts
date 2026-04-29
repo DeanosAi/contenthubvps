@@ -210,6 +210,75 @@ export function computePlatformBreakdown(jobs: Job[]): PlatformRow[] {
 }
 
 // =====================================================================
+// Round 7.12 — Jobs by Type breakdown
+// =====================================================================
+
+export interface JobTypeRow {
+  /** The type label, e.g. "Video", "Graphic Design", or "Uncategorised" */
+  type: string
+  /** How many jobs include this type. A single job with multiple
+   *  types is counted once in EACH bucket — this is intentional and
+   *  the way the report explains team workload. The total across
+   *  buckets will exceed the total number of jobs. */
+  count: number
+  /** Percentage of total jobs (rounded). Used for visual bars in
+   *  the report UI. */
+  percentage: number
+}
+
+/**
+ * Round 7.12 — count jobs per type for the date range.
+ *
+ * IMPORTANT: a job with multiple types contributes +1 to each bucket.
+ * So if the team did 100 jobs and they all had Video + Social Post,
+ * Video would show 100 and Social Post would also show 100, totalling
+ * 200 across buckets. This is the right answer when the question is
+ * "how much VIDEO work did we do" — a single multi-type job DID
+ * involve doing video work.
+ *
+ * Jobs with empty contentTypes are bucketed as "Uncategorised" so
+ * the report shows the gap rather than hiding it.
+ *
+ * Percentages are computed as `count / total_jobs * 100` (NOT
+ * count / sum_of_counts, which would always sum to 100% across buckets
+ * even when most jobs are multi-type). This means the percentages
+ * can sum to >100% — that's the right read.
+ */
+export function computeJobTypeBreakdown(jobs: Job[]): JobTypeRow[] {
+  const counts = new Map<string, number>()
+  for (const j of jobs) {
+    const types = j.contentTypes ?? []
+    if (types.length === 0) {
+      counts.set('Uncategorised', (counts.get('Uncategorised') ?? 0) + 1)
+      continue
+    }
+    for (const t of types) {
+      counts.set(t, (counts.get(t) ?? 0) + 1)
+    }
+  }
+
+  const totalJobs = jobs.length
+  const rows: JobTypeRow[] = []
+  for (const [type, count] of counts) {
+    rows.push({
+      type,
+      count,
+      percentage: totalJobs > 0 ? Math.round((count / totalJobs) * 100) : 0,
+    })
+  }
+
+  // Sort by count desc — most-frequent types first. "Uncategorised"
+  // sinks to the bottom regardless so it's visually separated from
+  // the main categories.
+  rows.sort((a, b) => {
+    if (a.type === 'Uncategorised') return 1
+    if (b.type === 'Uncategorised') return -1
+    return b.count - a.count
+  })
+  return rows
+}
+
+// =====================================================================
 // Top performers
 // =====================================================================
 

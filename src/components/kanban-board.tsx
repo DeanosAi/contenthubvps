@@ -51,6 +51,7 @@ export function KanbanBoard({
   columns,
   onSelectJob,
   onMoveJob,
+  archiveTrueCount,
 }: {
   jobs: Job[]
   /** Per-workspace column configuration, sorted by sortOrder. */
@@ -59,6 +60,15 @@ export function KanbanBoard({
   /** Called when a card is dragged to a new stage. The parent is
    * responsible for the API PATCH and any optimistic UI. */
   onMoveJob: (jobId: string, newStage: string) => void
+  /**
+   * Round 7.12: when set, overrides the displayed count for the
+   * archive column so it shows the TRUE number of archived jobs
+   * even when the hideArchived filter is excluding them from view.
+   * For non-archive columns, count is derived from `jobs` as
+   * before. The parent computes this from workspace-scoped (but
+   * otherwise filtered) data.
+   */
+  archiveTrueCount?: number
 }) {
   const { users } = useUsers()
   const userById = useMemo(() => {
@@ -145,7 +155,9 @@ export function KanbanBoard({
                     </h3>
                   </div>
                   <span className="text-xs text-slate-600 rounded-full border border-slate-300 bg-white px-2 py-1 flex-shrink-0">
-                    {column.jobs.length}
+                    {column.stageKey === 'archive' && typeof archiveTrueCount === 'number'
+                      ? archiveTrueCount
+                      : column.jobs.length}
                   </span>
                 </div>
 
@@ -210,9 +222,11 @@ export function KanbanBoard({
                               {job.platform && (
                                 <span className="rounded-full border border-slate-300 bg-slate-50 px-2 py-0.5">{job.platform}</span>
                               )}
-                              {job.contentType && (
-                                <span className="rounded-full border border-slate-300 bg-slate-50 px-2 py-0.5">{job.contentType}</span>
-                              )}
+                              {(job.contentTypes ?? []).map((t) => (
+                                <span key={t} className="rounded-full border border-indigo-200 bg-indigo-50 text-indigo-700 px-2 py-0.5">
+                                  {t}
+                                </span>
+                              ))}
                               {due && (
                                 <span
                                   className={`rounded-full border px-2 py-0.5 ${

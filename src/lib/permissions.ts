@@ -35,7 +35,7 @@ export const BRIEFER_EDITABLE_FIELDS = [
   'due_date',
   'hashtags',
   'platform',
-  'content_type',
+  'content_types',
   'campaign',
 ] as const
 
@@ -56,7 +56,7 @@ export const AUDIT_TRACKED_FIELDS = [
   'due_date',
   'hashtags',
   'platform',
-  'content_type',
+  'content_types',
   'campaign',
   'assigned_to',
   'approval_status',

@@ -6,6 +6,7 @@ import { useUsers } from '@/lib/use-users'
 import { AssetLinksEditor } from './asset-links-editor'
 import { CustomFieldsEditor } from './custom-fields-editor'
 import { CampaignField } from './campaign-field'
+import { JobTypePicker } from './job-type-picker'
 
 const STAGES: JobStage[] = ['brief', 'production', 'ready', 'posted', 'archive']
 const PLATFORMS = ['', 'instagram', 'facebook', 'tiktok', 'youtube']
@@ -27,7 +28,7 @@ interface CreatePayload {
   platform: string | null
   liveUrl: string | null
   notes: string | null
-  contentType: string | null
+  contentTypes: string[]
   briefUrl: string | null
   assetLinks: AssetLink[]
   customFields: CustomField[]
@@ -46,7 +47,7 @@ const EMPTY_DRAFT: Omit<CreatePayload, 'workspaceId'> = {
   platform: 'instagram',
   liveUrl: null,
   notes: null,
-  contentType: null,
+  contentTypes: [],
   briefUrl: null,
   assetLinks: [],
   customFields: [],
@@ -131,7 +132,9 @@ export function JobCreateDialog({
       hashtags: draft.hashtags?.trim() || null,
       liveUrl: draft.liveUrl?.trim() || null,
       notes: draft.notes?.trim() || null,
-      contentType: draft.contentType?.trim() || null,
+      // Round 7.12: contentTypes is an array, sent as-is.
+      // The server normalises (validates against ALLOWED_JOB_TYPES,
+      // dedupes, sorts).
       briefUrl: draft.briefUrl?.trim() || null,
       campaign: draft.campaign?.trim() || null,
       platform: draft.platform || null,
@@ -243,13 +246,13 @@ export function JobCreateDialog({
             </div>
 
             <div>
-              <label className="text-xs text-[hsl(var(--muted-foreground))]">Content type</label>
-              <input
-                className="mt-1 w-full rounded-lg border bg-transparent px-3 py-2 text-sm"
-                value={draft.contentType ?? ''}
-                onChange={(e) => patch('contentType', e.target.value || null)}
-                placeholder="reel, carousel, story…"
-              />
+              <label className="text-xs text-[hsl(var(--muted-foreground))]">Type of Job</label>
+              <div className="mt-1">
+                <JobTypePicker
+                  value={draft.contentTypes}
+                  onChange={(types) => patch('contentTypes', types)}
+                />
+              </div>
             </div>
 
             <div>
