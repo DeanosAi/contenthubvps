@@ -114,15 +114,32 @@ export async function POST(
     return NextResponse.json({ error: accessCheck.error }, { status: accessCheck.status })
   }
 
-  // Round 7.11: snapshot display_name from session. Falls back to
-  // the user's profile name (computed by lookup) for staff who
-  // haven't set a session displayName explicitly. For briefers,
-  // displayName is the per-session "who are you" answer — null
-  // here only if the briefer hasn't been prompted yet, in which
-  // case the UI should have intercepted before posting.
+  // Round 7.12p2: snapshot display_name from session, with a
+  // briefer-specific guardrail.
+  //
+  // For briefers (shared venue logins), session.displayName is the
+  // per-session "who's using the app today" answer. If it's null
+  // here, the prompt either didn't fire or was bypassed somehow —
+  // and we MUST NOT silently fall back to the profile name (which
+  // for shared accounts is the venue's name like "Mt Druitt Login",
+  // not a person's name). Refuse the post and tell the client to
+  // refresh; the briefer-shell will re-fire the prompt.
+  //
+  // For staff (admin/member), session.displayName is set at login
+  // to their profile name — falling back to a profile lookup is
+  // safe and helpful.
   let displayName = session.displayName?.trim() || null
   if (!displayName) {
-    // Look up the user's profile name as fallback.
+    if (session.role === 'briefer') {
+      return NextResponse.json(
+        {
+          error:
+            'Please set your name before commenting. Refresh the page to be prompted again.',
+        },
+        { status: 400 },
+      )
+    }
+    // Staff fallback: look up the user's profile name.
     const profile = await pool.query<{ name: string | null }>(
       `SELECT name FROM users WHERE id = $1`,
       [session.userId],

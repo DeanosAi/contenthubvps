@@ -36,11 +36,60 @@ import type { JobComment } from '@/lib/types'
 type SessionMe = {
   userId: string
   email: string
-  role: 'admin' | 'member'
+  role: 'admin' | 'member' | 'briefer'
 } | null
 
-function initialsFor(name: string | null | undefined, email: string | null | undefined): string {
-  const source = name?.trim() || email?.split('@')[0] || '?'
+/**
+ * Round 7.12p2: pick the right name to render for a comment.
+ *
+ * Three sources, in priority order:
+ *   1. c.displayName  — the per-comment "who's using the app today"
+ *      snapshot (briefers) or profile name at post time (staff).
+ *      Captured at the moment the comment was posted, so reflects
+ *      the actual person behind the action even if the venue's
+ *      shared briefer login was later used by someone else.
+ *   2. c.authorName   — the user's CURRENT profile name (joined
+ *      from users.name). Falls through here when the comment is
+ *      legacy (pre-displayName, stored as NULL) and the author
+ *      still has a profile name set.
+ *   3. c.authorEmail  — final fallback. Without this last resort
+ *      we'd render "Unknown" for accounts with no name set, which
+ *      is worse than showing the email.
+ *
+ * We also handle the deleted-user case: when authorId is null,
+ * the user account was deleted (FK SET NULL) so we render
+ * "Former user" rather than leaking a stale name.
+ *
+ * Why displayName takes priority over the joined authorName:
+ *   - Briefers use shared venue logins. The profile name on the
+ *     account ("Mt Druitt Login") is the venue, not the person.
+ *     The per-comment displayName ("Sarah") is the human who
+ *     actually typed the words.
+ *   - Even for staff, if their profile name was changed since
+ *     they posted, displayName preserves what they were called
+ *     at the time. Audit fidelity > current state.
+ */
+function pickDisplayName(c: JobComment): string {
+  if (c.authorId === null) return 'Former user'
+  const dn = c.displayName?.trim()
+  if (dn) return dn
+  const an = c.authorName?.trim()
+  if (an) return an
+  if (c.authorEmail) return c.authorEmail
+  return 'Unknown'
+}
+
+function initialsFor(c: JobComment): string {
+  // Same priority as pickDisplayName so the avatar matches the
+  // header. We pass the picked source through the existing
+  // initials extractor.
+  const source =
+    c.authorId === null
+      ? '?'
+      : c.displayName?.trim() ||
+        c.authorName?.trim() ||
+        c.authorEmail?.split('@')[0] ||
+        '?'
   const parts = source.split(/[\s._-]+/).filter(Boolean)
   if (parts.length === 0) return '?'
   if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
@@ -306,10 +355,9 @@ export function CommentsThread({ jobId }: { jobId: string }) {
             const canEdit = isAuthor
             const canDelete = isAuthor || isAdmin
             const isEditing = editingId === c.id
-            const displayName =
-              c.authorName?.trim() ||
-              c.authorEmail ||
-              (c.authorId === null ? 'Former user' : 'Unknown')
+            // Round 7.12p2: prefer per-comment displayName over the
+            // joined profile name. See pickDisplayName for full logic.
+            const displayName = pickDisplayName(c)
 
             return (
               <div
@@ -326,7 +374,7 @@ export function CommentsThread({ jobId }: { jobId: string }) {
                   title={displayName}
                   aria-hidden="true"
                 >
-                  {initialsFor(c.authorName, c.authorEmail)}
+                  {initialsFor(c)}
                 </span>
 
                 <div className="flex-1 min-w-0">
