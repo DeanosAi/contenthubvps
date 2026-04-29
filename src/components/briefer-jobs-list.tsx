@@ -1,21 +1,19 @@
 "use client"
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import type { Job } from '@/lib/types'
 
 /**
- * Round 7.11 — briefer's "my briefs" list view.
+ * Round 7.11 / 7.11p — briefer's "my briefs" list view.
  *
- * Shows all jobs in the briefer's workspace, newest first. Each
- * card shows:
- *   - Title
- *   - Briefer's name (the snapshot from the original submit)
- *   - Due date (if set)
- *   - A simple status indicator derived from the kanban stage
- *   - A short snippet of the description
- *
- * Clicking a card navigates to /briefer/jobs/[id] for full detail.
+ * Round 7.11p changes:
+ *   - Default view excludes archived briefs. Archived ones get
+ *     their own tab so the list doesn't grow unbounded.
+ *   - Search input filters by title (case-insensitive) and
+ *     description (case-insensitive). Client-side — at our scale
+ *     a venue has maybe dozens of briefs, fits comfortably in
+ *     memory and any keystroke filter is instant.
  *
  * Status mapping intentionally collapses the staff kanban into a
  * single user-meaningful label. The full kanban column (which
@@ -24,9 +22,6 @@ import type { Job } from '@/lib/types'
  */
 
 function statusLabel(stage: string): { label: string; tint: string } {
-  // Built-in stages map cleanly. Custom stages (cust_*) fall through
-  // to a generic "In progress" since we don't expose the staff's
-  // kanban configuration to briefers.
   if (stage === 'brief') return { label: 'Brief received', tint: 'bg-slate-100 text-slate-700' }
   if (stage === 'production') return { label: 'In production', tint: 'bg-blue-50 text-blue-700' }
   if (stage === 'ready') return { label: 'Ready for review', tint: 'bg-amber-50 text-amber-700' }
@@ -53,10 +48,14 @@ function formatDate(iso: string | null): string | null {
   })
 }
 
+type Tab = 'active' | 'archived'
+
 export function BrieferJobsList() {
   const [jobs, setJobs] = useState<Job[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [tab, setTab] = useState<Tab>('active')
+  const [query, setQuery] = useState('')
 
   useEffect(() => {
     let cancelled = false
@@ -77,6 +76,33 @@ export function BrieferJobsList() {
       cancelled = true
     }
   }, [])
+
+  // Counts for the tab labels — show even when filtered by search
+  // so the briefer can see at-a-glance "I have 3 active and 12
+  // archived" without flipping tabs.
+  const activeCount = useMemo(
+    () => jobs.filter((j) => j.stage !== 'archive').length,
+    [jobs],
+  )
+  const archivedCount = useMemo(
+    () => jobs.filter((j) => j.stage === 'archive').length,
+    [jobs],
+  )
+
+  // Filtered list: tab + search. Search matches title and
+  // description, case-insensitive. Trimmed empty string = no filter.
+  const filteredJobs = useMemo(() => {
+    const isArchived = tab === 'archived'
+    const trimmedQuery = query.trim().toLowerCase()
+    return jobs.filter((j) => {
+      const stageMatch = isArchived ? j.stage === 'archive' : j.stage !== 'archive'
+      if (!stageMatch) return false
+      if (!trimmedQuery) return true
+      const title = (j.title ?? '').toLowerCase()
+      const desc = (j.description ?? '').toLowerCase()
+      return title.includes(trimmedQuery) || desc.includes(trimmedQuery)
+    })
+  }, [jobs, tab, query])
 
   if (loading) {
     return <p className="text-sm text-slate-600">Loading your briefs…</p>
@@ -108,7 +134,7 @@ export function BrieferJobsList() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
         <h2 className="text-lg font-semibold text-slate-900">My briefs</h2>
         <Link
           href="/briefer/submit"
@@ -117,51 +143,119 @@ export function BrieferJobsList() {
           Submit a new brief
         </Link>
       </div>
-      <div className="space-y-3">
-        {jobs.map((j) => {
-          const status = statusLabel(j.stage)
-          const approval = approvalPill(j.approvalStatus)
-          const due = formatDate(j.dueDate)
-          return (
-            <Link
-              key={j.id}
-              href={`/briefer/jobs/${j.id}`}
-              className="block rounded-2xl border border-slate-200 bg-white p-4 hover:border-indigo-400 hover:shadow-[0_2px_8px_rgba(15,23,42,0.06)] transition-colors"
-            >
-              <div className="flex items-start justify-between gap-3 flex-wrap">
-                <div className="min-w-0 flex-1">
-                  <h3 className="text-base font-semibold text-slate-900 truncate">
-                    {j.title}
-                  </h3>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    {j.brieferDisplayName ? (
-                      <>Briefed by <span className="text-slate-700">{j.brieferDisplayName}</span></>
-                    ) : (
-                      <>Submitted brief</>
-                    )}
-                    {due && <> · Due {due}</>}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  {approval && (
-                    <span className={`text-[11px] font-medium px-2 py-0.5 rounded-md ${approval.tint}`}>
-                      {approval.label}
-                    </span>
-                  )}
-                  <span className={`text-[11px] font-medium px-2 py-0.5 rounded-md ${status.tint}`}>
-                    {status.label}
-                  </span>
-                </div>
-              </div>
-              {j.description && (
-                <p className="text-sm text-slate-600 mt-2 line-clamp-2">
-                  {j.description}
-                </p>
-              )}
-            </Link>
-          )
-        })}
+
+      {/* Tabs + search */}
+      <div className="flex items-center gap-3 mb-4 flex-wrap">
+        <div className="inline-flex rounded-lg border border-slate-200 bg-white p-0.5">
+          <TabButton
+            active={tab === 'active'}
+            onClick={() => setTab('active')}
+            label="Active"
+            count={activeCount}
+          />
+          <TabButton
+            active={tab === 'archived'}
+            onClick={() => setTab('archived')}
+            label="Archived"
+            count={archivedCount}
+          />
+        </div>
+        <input
+          type="search"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search by title or description…"
+          className="flex-1 min-w-[200px] rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm focus:outline-none focus:border-indigo-500"
+        />
       </div>
+
+      {/* Results */}
+      {filteredJobs.length === 0 ? (
+        <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-600">
+          {query.trim() ? (
+            <>No briefs match &ldquo;{query.trim()}&rdquo;.</>
+          ) : tab === 'archived' ? (
+            <>No archived briefs yet.</>
+          ) : (
+            <>No active briefs.</>
+          )}
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {filteredJobs.map((j) => {
+            const status = statusLabel(j.stage)
+            const approval = approvalPill(j.approvalStatus)
+            const due = formatDate(j.dueDate)
+            return (
+              <Link
+                key={j.id}
+                href={`/briefer/jobs/${j.id}`}
+                className="block rounded-2xl border border-slate-200 bg-white p-4 hover:border-indigo-400 hover:shadow-[0_2px_8px_rgba(15,23,42,0.06)] transition-colors"
+              >
+                <div className="flex items-start justify-between gap-3 flex-wrap">
+                  <div className="min-w-0 flex-1">
+                    <h3 className="text-base font-semibold text-slate-900 truncate">
+                      {j.title}
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      {j.brieferDisplayName ? (
+                        <>Briefed by <span className="text-slate-700">{j.brieferDisplayName}</span></>
+                      ) : (
+                        <>Submitted brief</>
+                      )}
+                      {due && <> · Due {due}</>}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {approval && (
+                      <span className={`text-[11px] font-medium px-2 py-0.5 rounded-md ${approval.tint}`}>
+                        {approval.label}
+                      </span>
+                    )}
+                    <span className={`text-[11px] font-medium px-2 py-0.5 rounded-md ${status.tint}`}>
+                      {status.label}
+                    </span>
+                  </div>
+                </div>
+                {j.description && (
+                  <p className="text-sm text-slate-600 mt-2 line-clamp-2">
+                    {j.description}
+                  </p>
+                )}
+              </Link>
+            )
+          })}
+        </div>
+      )}
     </div>
+  )
+}
+
+function TabButton({
+  active,
+  onClick,
+  label,
+  count,
+}: {
+  active: boolean
+  onClick: () => void
+  label: string
+  count: number
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${
+        active
+          ? 'bg-indigo-600 text-white'
+          : 'text-slate-700 hover:text-indigo-700'
+      }`}
+    >
+      {label}
+      <span className={`ml-1.5 text-xs ${active ? 'text-indigo-100' : 'text-slate-500'}`}>
+        ({count})
+      </span>
+    </button>
   )
 }

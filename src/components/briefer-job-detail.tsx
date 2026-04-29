@@ -115,6 +115,10 @@ export function BrieferJobDetail({ jobId }: { jobId: string }) {
   const [saveError, setSaveError] = useState<string | null>(null)
   const [saveSuccess, setSaveSuccess] = useState(false)
 
+  // Round 7.11p: approval-action state
+  const [approving, setApproving] = useState(false)
+  const [approvalError, setApprovalError] = useState<string | null>(null)
+
   function applyJobToForm(j: Job) {
     setForm({
       title: j.title,
@@ -211,6 +215,38 @@ export function BrieferJobDetail({ jobId }: { jobId: string }) {
     }
   }
 
+  // Round 7.11p: approval action — POSTs to the dedicated
+  // /api/jobs/:id/approval endpoint with a single decision string.
+  // Server validates the transition (must be FROM 'awaiting').
+  async function submitApproval(decision: 'approved' | 'changes_requested') {
+    if (!job || approving) return
+    setApproving(true)
+    setApprovalError(null)
+    try {
+      const res = await fetch(
+        `/api/jobs/${encodeURIComponent(jobId)}/approval`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ decision }),
+        },
+      )
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}))
+        setApprovalError(j?.error || 'Failed to submit')
+        return
+      }
+      const data = await res.json()
+      const updated: Job = data?.job ?? data
+      setJob(updated)
+      applyJobToForm(updated)
+    } catch (err) {
+      setApprovalError(err instanceof Error ? err.message : 'Failed to submit')
+    } finally {
+      setApproving(false)
+    }
+  }
+
   if (loading) return <p className="text-sm text-slate-600">Loading…</p>
   if (error || !job) {
     return (
@@ -248,9 +284,40 @@ export function BrieferJobDetail({ jobId }: { jobId: string }) {
         <p className="text-[11px] uppercase tracking-wider text-slate-500">Status</p>
         <p className="text-base font-medium text-slate-900 mt-1">{status}</p>
         {approval && (
-          <div className={`mt-3 rounded-lg border px-3 py-2 text-sm ${approval.tint}`}>
+          <div className={`mt-3 rounded-lg border px-3 py-2 text-sm ${approval.tint} space-y-2`}>
             <p className="font-semibold">{approval.label}</p>
-            <p className="mt-0.5">{approval.help}</p>
+            <p>{approval.help}</p>
+            {/* Round 7.11p: approval buttons appear ONLY when the
+                state is currently 'awaiting' — the only state where
+                a briefer's decision is meaningful. After they
+                approve or request changes, the buttons disappear
+                and the banner reflects their decision instead. */}
+            {job.approvalStatus === 'awaiting' && (
+              <div className="pt-1 flex items-center gap-2 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => submitApproval('approved')}
+                  disabled={approving}
+                  className="rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold px-3 py-1.5 text-xs disabled:opacity-50"
+                >
+                  {approving ? 'Submitting…' : 'Approve'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => submitApproval('changes_requested')}
+                  disabled={approving}
+                  className="rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-semibold px-3 py-1.5 text-xs disabled:opacity-50"
+                >
+                  {approving ? 'Submitting…' : 'Request changes'}
+                </button>
+                <span className="text-xs text-slate-700">
+                  Or leave a comment below to explain.
+                </span>
+              </div>
+            )}
+            {approvalError && (
+              <p className="text-xs text-red-700">{approvalError}</p>
+            )}
           </div>
         )}
       </div>

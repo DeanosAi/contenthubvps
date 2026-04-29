@@ -72,10 +72,16 @@ export async function POST(req: NextRequest) {
     email: user.email,
     role: user.role,
     workspaceId: user.workspaceId,
-    // Initial displayName: the user's profile name. For briefers
-    // this will be replaced by the per-session "who are you" answer
-    // before they post anything. For staff it stays as their name.
-    displayName: user.name,
+    // Round 7.11p: briefer logins ALWAYS start with displayName=null
+    // so the "Who are you today?" prompt fires reliably on every
+    // fresh login. The shared venue login is used by different
+    // people on different days — assuming "the last name set is
+    // still you" is wrong. Force re-identification.
+    //
+    // For staff (admin/member), displayName falls back to their
+    // profile name as before — staff identify by their own profile
+    // and the prompt is only useful for the shared-account case.
+    displayName: user.role === 'briefer' ? null : user.name,
   })
   await setSessionCookie(token)
 
