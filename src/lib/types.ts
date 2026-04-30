@@ -243,6 +243,13 @@ export interface Job {
    * shared login is later used by someone else.
    */
   brieferDisplayName: string | null
+  /**
+   * Round 7.14: email captured at brief submission for the briefer
+   * who submitted. Snapshotted just like brieferDisplayName so
+   * future email notifications can reach the original briefer
+   * even after they leave the venue session.
+   */
+  brieferDisplayEmail: string | null
   createdAt: string
   updatedAt: string
 }
@@ -283,6 +290,14 @@ export interface SessionUser {
   role: UserRole
   workspaceId: string | null
   displayName: string | null
+  /**
+   * Round 7.14: per-session email captured at the briefer "who are
+   * you" prompt (or the user's profile email for staff). Used by
+   * future email notification features to target the actual person
+   * behind a shared briefer login. Null until the prompt is
+   * answered or for legacy sessions.
+   */
+  displayEmail: string | null
 }
 
 /**
@@ -318,6 +333,24 @@ export interface JobComment {
   authorEmail: string | null
   authorRole: UserRole | null
   displayName: string | null
+  /**
+   * Round 7.14: per-comment email snapshot. For briefer comments
+   * this is what the briefer entered at the "who are you" prompt.
+   * For staff comments it's their profile email. Null for legacy
+   * comments posted before this round. UI never displays this
+   * directly — it's only revealed on hover/click of the name and
+   * used by future email notification features.
+   */
+  displayEmail: string | null
+  /**
+   * Round 7.14: when this comment is a reply to another comment,
+   * `parentId` holds the parent's id. Null for top-level comments.
+   * If the parent is later deleted, parentId becomes null again
+   * (FK ON DELETE SET NULL) — the reply remains but its threading
+   * link is severed. UI shows "↪ Replying to a deleted comment"
+   * for replies whose parent we can't find in the comment list.
+   */
+  parentId: string | null
   body: string
   edited: boolean
   createdAt: string

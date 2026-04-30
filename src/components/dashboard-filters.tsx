@@ -28,7 +28,7 @@ const SORT_OPTIONS: { value: SortKey; label: string }[] = [
   { value: 'priorityDesc', label: 'Priority (highest)' },
   { value: 'priorityAsc', label: 'Priority (lowest)' },
   // Round 7.13: categorical sorts — group jobs by attribute.
-  { value: 'assignee', label: 'Assignee (A → Z)' },
+  { value: 'assignee', label: 'Assigned to (A → Z)' },
   { value: 'jobType', label: 'Type of Job' },
   { value: 'approvalStatus', label: 'Approval status (action first)' },
   { value: 'stage', label: 'Stage' },
@@ -121,9 +121,11 @@ export function DashboardFilters({
         </select>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-3 items-end">
-        {/* Round 7.12: Assignee dropdown with Unassigned option */}
+        {/* Round 7.12: Assignee dropdown with Unassigned option.
+            Round 7.14: label renamed to "Assigned to" per Dean's
+            preference — matches the column-style noun in list view. */}
         <label className="flex flex-col gap-1 text-xs text-slate-600">
-          Assignee
+          Assigned to
           <select
             className={inputClass}
             value={filter.assignedTo}

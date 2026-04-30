@@ -30,10 +30,15 @@ import { assertCanViewJob } from '@/lib/permissions'
 
 const CreateCommentInput = z.object({
   body: z.string().trim().min(1, 'Comment body required').max(5000),
+  // Round 7.14: optional parent comment id for replies. When set,
+  // the new comment is a reply to that comment. Server validates
+  // the parent exists on the same job before accepting.
+  parentId: z.string().nullable().optional(),
 })
 
 const COMMENT_SELECT = `
-  c.id, c.job_id, c.author_id, c.body, c.edited, c.display_name,
+  c.id, c.job_id, c.author_id, c.body, c.edited,
+  c.display_name, c.display_email, c.parent_id,
   c.created_at, c.updated_at,
   u.name  AS author_name,
   u.email AS author_email,
@@ -128,30 +133,57 @@ export async function POST(
   // For staff (admin/member), session.displayName is set at login
   // to their profile name — falling back to a profile lookup is
   // safe and helpful.
+  //
+  // Round 7.14: same shape for displayEmail. Briefers MUST have
+  // entered an email at the prompt; staff fall back to their
+  // profile email (set at login).
   let displayName = session.displayName?.trim() || null
-  if (!displayName) {
+  let displayEmail = session.displayEmail?.trim() || null
+  if (!displayName || (session.role === 'briefer' && !displayEmail)) {
     if (session.role === 'briefer') {
       return NextResponse.json(
         {
           error:
-            'Please set your name before commenting. Refresh the page to be prompted again.',
+            'Please set your name and email before commenting. Refresh the page to be prompted again.',
         },
         { status: 400 },
       )
     }
-    // Staff fallback: look up the user's profile name.
-    const profile = await pool.query<{ name: string | null }>(
-      `SELECT name FROM users WHERE id = $1`,
+    // Staff fallback: look up the user's profile name + email.
+    const profile = await pool.query<{ name: string | null; email: string | null }>(
+      `SELECT name, email FROM users WHERE id = $1`,
       [session.userId],
     )
-    displayName = profile.rows[0]?.name?.trim() || null
+    if (!displayName) displayName = profile.rows[0]?.name?.trim() || null
+    if (!displayEmail) displayEmail = profile.rows[0]?.email?.trim() || null
+  }
+
+  // Round 7.14: validate parentId — when a reply is posted, the
+  // parent comment must exist on this same job. Prevents threading
+  // across jobs (an attack vector if a briefer in workspace A could
+  // reply to a comment on a job in workspace B). Permissive on
+  // missing parent: if it's null/undefined, this is a top-level
+  // comment, no validation needed.
+  const parentId = parsed.data.parentId?.trim() || null
+  if (parentId) {
+    const parentRes = await pool.query<{ id: string; job_id: string }>(
+      `SELECT id, job_id FROM job_comments WHERE id = $1`,
+      [parentId],
+    )
+    if (parentRes.rowCount === 0 || parentRes.rows[0].job_id !== jobId) {
+      return NextResponse.json(
+        { error: 'Parent comment not found on this job' },
+        { status: 400 },
+      )
+    }
   }
 
   const id = randomUUID()
   await pool.query(
-    `INSERT INTO job_comments (id, job_id, author_id, body, display_name)
-     VALUES ($1, $2, $3, $4, $5)`,
-    [id, jobId, session.userId, parsed.data.body, displayName],
+    `INSERT INTO job_comments
+       (id, job_id, author_id, body, display_name, display_email, parent_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+    [id, jobId, session.userId, parsed.data.body, displayName, displayEmail, parentId],
   )
 
   const result = await pool.query(

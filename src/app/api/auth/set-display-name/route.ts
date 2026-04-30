@@ -37,6 +37,21 @@ const Input = z.object({
     .trim()
     .min(1, 'Name cannot be empty')
     .max(80, 'Name must be 80 characters or less'),
+  // Round 7.14: optional email field. The briefer prompt sends
+  // both name AND email together. Old callers (any client that
+  // still posts only displayName) keep working — email simply
+  // doesn't change in that case. The briefer prompt UI enforces
+  // email-required client-side; the API is permissive so we don't
+  // break any in-progress flows.
+  displayEmail: z
+    .string()
+    .trim()
+    .max(200, 'Email must be 200 characters or less')
+    .regex(
+      /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
+      'Please enter a valid email address',
+    )
+    .optional(),
 })
 
 export async function POST(req: NextRequest) {
@@ -58,12 +73,20 @@ export async function POST(req: NextRequest) {
     )
   }
 
+  // Round 7.14: only update displayEmail when the caller actually
+  // sent one. Allows partial updates: a future "just rename me"
+  // path can post displayName alone and leave displayEmail intact.
   const newSession = {
     ...session,
     displayName: parsed.data.displayName,
+    displayEmail: parsed.data.displayEmail ?? session.displayEmail,
   }
   const token = signSession(newSession)
   await setSessionCookie(token)
 
-  return NextResponse.json({ ok: true, displayName: parsed.data.displayName })
+  return NextResponse.json({
+    ok: true,
+    displayName: parsed.data.displayName,
+    displayEmail: newSession.displayEmail,
+  })
 }

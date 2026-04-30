@@ -20,5 +20,10 @@ export async function GET() {
     role: session.role,
     workspaceId: session.workspaceId,
     displayName: session.displayName,
+    // Round 7.14: client components (briefer prompt + comments
+    // thread email-on-hover) need to know if displayEmail is set
+    // to decide whether to re-prompt. Null for legacy sessions
+    // and for fresh briefer logins (until the prompt completes).
+    displayEmail: session.displayEmail,
   })
 }

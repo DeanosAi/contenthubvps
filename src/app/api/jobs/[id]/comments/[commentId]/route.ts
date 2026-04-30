@@ -34,7 +34,8 @@ const PatchCommentInput = z.object({
 })
 
 const COMMENT_SELECT = `
-  c.id, c.job_id, c.author_id, c.body, c.edited, c.display_name,
+  c.id, c.job_id, c.author_id, c.body, c.edited,
+  c.display_name, c.display_email, c.parent_id,
   c.created_at, c.updated_at,
   u.name  AS author_name,
   u.email AS author_email,

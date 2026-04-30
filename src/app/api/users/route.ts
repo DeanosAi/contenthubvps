@@ -33,11 +33,18 @@ const CreateUserInput = z.object({
  *
  * We never return password hashes.
  */
-export async function GET() {
+export async function GET(req: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   await ensureSchema()
+
+  // Round 7.14: admins call /api/users from two places:
+  //   - user management UI: needs ALL users including briefers
+  //   - dashboard assignee dropdown: needs only assignable users
+  //     (admin + member, NOT briefer — briefers don't do production)
+  // The dropdown caller passes ?for=assignee to get the filtered list.
+  const forAssignee = new URL(req.url).searchParams.get('for') === 'assignee'
 
   // Briefer scoping — return only their own user record.
   if (session.role === 'briefer') {
@@ -54,6 +61,19 @@ export async function GET() {
   const users = result.rows.map(rowToUser)
 
   if (session.role === 'admin') {
+    // Round 7.14: admins see ALL users in the user-management UI
+    // (need to manage briefers there) but the assignee dropdown
+    // for the dashboard pulls from this same endpoint and should
+    // exclude briefers. Resolve via a query param: when ?for=assignee
+    // is present, return the slim non-briefer list; otherwise return
+    // the full list for admin user management.
+    if (forAssignee) {
+      return NextResponse.json(
+        users
+          .filter((u) => u.role !== 'briefer')
+          .map((u) => ({ id: u.id, email: u.email, name: u.name }))
+      )
+    }
     return NextResponse.json(users)
   }
   // Members get the slim list (used for assignee dropdowns).

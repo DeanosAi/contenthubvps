@@ -79,6 +79,40 @@ function pickDisplayName(c: JobComment): string {
   return 'Unknown'
 }
 
+/**
+ * Round 7.14: pick the email to reveal on hover/click of a name.
+ *
+ * Priority matches pickDisplayName:
+ *   1. c.displayEmail   — captured at the briefer prompt for the
+ *      person who actually posted, OR set at login for staff.
+ *      Most accurate "how do I reach this person" value.
+ *   2. c.authorEmail    — joined from users.email. Falls through
+ *      when the comment was posted before 7.14 (no displayEmail
+ *      snapshot exists yet).
+ *   3. null             — for deleted users or rare cases with no
+ *      email at all. UI suppresses the popover when this is null.
+ */
+function pickEmail(c: JobComment): string | null {
+  if (c.authorId === null) return null
+  const de = c.displayEmail?.trim()
+  if (de) return de
+  const ae = c.authorEmail?.trim()
+  if (ae) return ae
+  return null
+}
+
+/**
+ * Round 7.14: short excerpt of a comment body for the "↪ Replying
+ * to X: 'excerpt...'" snippet shown above replies. Trims and
+ * truncates to ~50 chars with ellipsis. Single-line — newlines
+ * collapse to spaces so the snippet stays compact.
+ */
+function bodyExcerpt(body: string, max = 50): string {
+  const collapsed = body.replace(/\s+/g, ' ').trim()
+  if (collapsed.length <= max) return collapsed
+  return collapsed.slice(0, max).trimEnd() + '…'
+}
+
 function initialsFor(c: JobComment): string {
   // Same priority as pickDisplayName so the avatar matches the
   // header. We pass the picked source through the existing
@@ -154,6 +188,17 @@ export function CommentsThread({ jobId }: { jobId: string }) {
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
 
+  // Round 7.14: when set, the next comment posted will be a reply
+  // to this comment id. Set by clicking "Reply" on any comment;
+  // cleared after posting or when the user clicks "Cancel reply"
+  // in the composer.
+  const [replyToId, setReplyToId] = useState<string | null>(null)
+
+  // Round 7.14: which comment's email popover is currently open.
+  // Click-toggled — clicking another name closes the previous one.
+  // Click-outside also closes (handled via useEffect below).
+  const [emailPopoverId, setEmailPopoverId] = useState<string | null>(null)
+
   // Initial load: who am I + the comments for this job
   useEffect(() => {
     let cancelled = false
@@ -185,6 +230,19 @@ export function CommentsThread({ jobId }: { jobId: string }) {
     }
   }, [jobId])
 
+  // Round 7.14: close email popover when user clicks anywhere
+  // outside it. Listening on document mousedown is the simplest
+  // pattern — the popover trigger button uses stopPropagation to
+  // prevent its own click from immediately closing the popover.
+  useEffect(() => {
+    if (!emailPopoverId) return
+    function onDocClick() {
+      setEmailPopoverId(null)
+    }
+    document.addEventListener('mousedown', onDocClick)
+    return () => document.removeEventListener('mousedown', onDocClick)
+  }, [emailPopoverId])
+
   async function postComment() {
     const body = draft.trim()
     if (body.length === 0 || posting) return
@@ -196,7 +254,10 @@ export function CommentsThread({ jobId }: { jobId: string }) {
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ body }),
+          // Round 7.14: include parentId when replying. null/undefined
+          // for top-level comments. Server validates parentId belongs
+          // to this same job.
+          body: JSON.stringify({ body, parentId: replyToId }),
         },
       )
       if (!res.ok) {
@@ -207,6 +268,8 @@ export function CommentsThread({ jobId }: { jobId: string }) {
       const created = (await res.json()) as JobComment
       setComments((cs) => [...cs, created])
       setDraft('')
+      // Round 7.14: clear reply context after a successful post.
+      setReplyToId(null)
       // After posting, reset the auto-grown height back to baseline
       // and blur the textarea so a mobile keyboard doesn't keep
       // covering the new comment.
@@ -292,6 +355,36 @@ export function CommentsThread({ jobId }: { jobId: string }) {
 
       {/* Composer */}
       <div className="rounded-lg border border-slate-300 bg-white overflow-hidden mb-4">
+        {/* Round 7.14: reply context strip — shows when the user
+            has clicked Reply on a comment. They can dismiss it via
+            the × to compose a top-level comment instead. */}
+        {replyToId && (() => {
+          const parent = comments.find((c) => c.id === replyToId)
+          if (!parent) {
+            // Shouldn't happen but defensively clear if it does.
+            setReplyToId(null)
+            return null
+          }
+          return (
+            <div className="flex items-center justify-between gap-2 px-3 py-1.5 bg-indigo-50 border-b border-indigo-100 text-xs text-slate-700">
+              <span className="truncate">
+                ↪ Replying to{' '}
+                <span className="font-medium">{pickDisplayName(parent)}</span>
+                <span className="text-slate-500">
+                  : &ldquo;{bodyExcerpt(parent.body)}&rdquo;
+                </span>
+              </span>
+              <button
+                type="button"
+                onClick={() => setReplyToId(null)}
+                className="text-slate-500 hover:text-slate-900 px-1 shrink-0"
+                aria-label="Cancel reply"
+              >
+                ×
+              </button>
+            </div>
+          )
+        })()}
         <textarea
           ref={composerRef}
           value={draft}
@@ -305,7 +398,7 @@ export function CommentsThread({ jobId }: { jobId: string }) {
               void postComment()
             }
           }}
-          placeholder="Add a comment…"
+          placeholder={replyToId ? 'Write your reply…' : 'Add a comment…'}
           rows={2}
           maxLength={5000}
           className="w-full px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none resize-y min-h-[60px] max-h-[240px]"
@@ -321,7 +414,7 @@ export function CommentsThread({ jobId }: { jobId: string }) {
             disabled={posting || draft.trim().length === 0}
             className="rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-3 py-1.5 text-xs disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {posting ? 'Posting…' : 'Post'}
+            {posting ? 'Posting…' : replyToId ? 'Post reply' : 'Post'}
           </button>
         </div>
       </div>
@@ -358,6 +451,18 @@ export function CommentsThread({ jobId }: { jobId: string }) {
             // Round 7.12p2: prefer per-comment displayName over the
             // joined profile name. See pickDisplayName for full logic.
             const displayName = pickDisplayName(c)
+            // Round 7.14: email for hover/click reveal. Null when
+            // the author was deleted or no email exists; popover
+            // suppressed in that case.
+            const email = pickEmail(c)
+            // Round 7.14: parent comment for the "↪ Replying to..."
+            // snippet on replies. Null when this is a top-level
+            // comment OR when the parent was deleted (FK SET NULL).
+            const parent = c.parentId
+              ? comments.find((x) => x.id === c.parentId) ?? null
+              : null
+            const hasParentLink = c.parentId !== null
+            const isPopoverOpen = emailPopoverId === c.id
 
             return (
               <div
@@ -378,11 +483,80 @@ export function CommentsThread({ jobId }: { jobId: string }) {
                 </span>
 
                 <div className="flex-1 min-w-0">
+                  {/* Round 7.14: reply context snippet — appears
+                      above replies, shows who/what is being replied
+                      to. If parent was deleted, shows that fact. */}
+                  {hasParentLink && (
+                    <div className="text-[11px] text-slate-500 mb-1 truncate">
+                      ↪ Replying to{' '}
+                      {parent ? (
+                        <>
+                          <span className="text-slate-700 font-medium">
+                            {pickDisplayName(parent)}
+                          </span>
+                          <span className="text-slate-500">
+                            : &ldquo;{bodyExcerpt(parent.body)}&rdquo;
+                          </span>
+                        </>
+                      ) : (
+                        <span className="italic">a deleted comment</span>
+                      )}
+                    </div>
+                  )}
+
                   {/* Header row: name + time + actions */}
                   <div className="flex items-baseline gap-2 flex-wrap">
-                    <span className="text-sm font-medium text-slate-900 truncate">
-                      {displayName}
-                    </span>
+                    {/* Round 7.14: name is now a button when an
+                        email is available — click to reveal a small
+                        popover with the email + mailto: link. Hover
+                        also shows the email via title (passive). */}
+                    {email ? (
+                      <span className="relative inline-block">
+                        <button
+                          type="button"
+                          onMouseDown={(e) => {
+                            // Stop propagation here so the document
+                            // mousedown listener (which closes any
+                            // open popover) doesn't fire before the
+                            // click toggle below. Without this, the
+                            // popover is closed by the mousedown
+                            // immediately before the click reopens
+                            // it — net effect: stays open and never
+                            // toggles closed when the user clicks
+                            // the same name again.
+                            e.stopPropagation()
+                          }}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setEmailPopoverId(isPopoverOpen ? null : c.id)
+                          }}
+                          title={email}
+                          className="text-sm font-medium text-slate-900 truncate hover:underline focus:outline-none focus:ring-1 focus:ring-indigo-500 rounded"
+                        >
+                          {displayName}
+                        </button>
+                        {isPopoverOpen && (
+                          <span
+                            onMouseDown={(e) => e.stopPropagation()}
+                            className="absolute left-0 top-full mt-1 z-10 rounded-lg border border-slate-200 bg-white shadow-lg px-3 py-2 text-xs whitespace-nowrap"
+                          >
+                            <span className="block text-slate-500 text-[10px] uppercase tracking-wider mb-0.5">
+                              Contact
+                            </span>
+                            <a
+                              href={`mailto:${email}`}
+                              className="text-indigo-700 hover:underline"
+                            >
+                              {email}
+                            </a>
+                          </span>
+                        )}
+                      </span>
+                    ) : (
+                      <span className="text-sm font-medium text-slate-900 truncate">
+                        {displayName}
+                      </span>
+                    )}
                     <span className="text-[11px] text-slate-500">
                       {formatTimestamp(c.createdAt)}
                       {c.edited && ' · edited'}
@@ -391,9 +565,29 @@ export function CommentsThread({ jobId }: { jobId: string }) {
                     {/* Spacer that pushes actions to the right when there's room */}
                     <span className="flex-1" />
 
-                    {/* Edit / delete actions */}
-                    {!isEditing && (canEdit || canDelete) && (
+                    {/* Reply / edit / delete actions */}
+                    {!isEditing && (
                       <span className="flex items-center gap-2 text-[11px]">
+                        {/* Round 7.14: Reply button on every comment
+                            (even your own). Sets the reply target for
+                            the composer at the top of the thread. */}
+                        {!confirmDeleteId && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setReplyToId(c.id)
+                              setEditingId(null)
+                              // Focus the composer so the user can
+                              // start typing immediately.
+                              if (composerRef.current) {
+                                composerRef.current.focus()
+                              }
+                            }}
+                            className="text-slate-500 hover:text-indigo-700"
+                          >
+                            reply
+                          </button>
+                        )}
                         {canEdit && (
                           <button
                             type="button"

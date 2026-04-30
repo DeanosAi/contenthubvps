@@ -69,7 +69,7 @@ const COLUMN_LIST = `
   custom_fields_json, campaign,
   facebook_live_url, facebook_post_id, instagram_live_url,
   posted_at, live_metrics_json, last_metrics_fetch_at,
-  briefer_display_name,
+  briefer_display_name, briefer_display_email,
   created_at, updated_at
 `
 
@@ -124,9 +124,10 @@ export async function POST(req: NextRequest) {
   }
 
   const brieferName = session.displayName?.trim() || null
-  if (session.role === 'briefer' && !brieferName) {
+  const brieferEmail = session.displayEmail?.trim() || null
+  if (session.role === 'briefer' && (!brieferName || !brieferEmail)) {
     return NextResponse.json(
-      { error: 'Please set your name before submitting a brief' },
+      { error: 'Please set your name and email before submitting a brief' },
       { status: 400 }
     )
   }
@@ -139,11 +140,11 @@ export async function POST(req: NextRequest) {
     `INSERT INTO jobs (
       id, workspace_id, title, description, stage, priority, due_date,
       hashtags, platform, content_types, campaign,
-      briefer_display_name
+      briefer_display_name, briefer_display_email
     ) VALUES (
       $1, $2, $3, $4, 'brief', 0, $5,
       $6, $7, $8, $9,
-      $10
+      $10, $11
     )`,
     [
       id,
@@ -156,6 +157,7 @@ export async function POST(req: NextRequest) {
       contentTypes,
       normaliseCampaign(parsed.data.campaign),
       brieferName,
+      brieferEmail,
     ]
   )
 

@@ -226,7 +226,14 @@ export async function logJobEdits(
   // email (which is the shared venue login like
   // briefer-mt-druitt@...). For staff it falls back to
   // the session displayName, then their email.
+  //
+  // Round 7.14: also snapshot the editor's email — for briefers
+  // this is the displayEmail captured at the prompt; for staff
+  // it falls back to session.email (their login email). Used by
+  // future email notification features to know who to "cc" on
+  // edit-driven alerts.
   const editorName = session.displayName?.trim() || session.email
+  const editorEmail = session.displayEmail?.trim() || session.email
   const editorRole: UserRole = session.role
 
   // Build a multi-row INSERT. Postgres handles arbitrary numbers
@@ -243,16 +250,17 @@ export async function logJobEdits(
       change.newValue,
       session.userId,
       editorName,
+      editorEmail,
       editorRole,
     )
-    tuples.push(`($${p}, $${p+1}, $${p+2}, $${p+3}, $${p+4}, $${p+5}, $${p+6}, $${p+7})`)
-    p += 8
+    tuples.push(`($${p}, $${p+1}, $${p+2}, $${p+3}, $${p+4}, $${p+5}, $${p+6}, $${p+7}, $${p+8})`)
+    p += 9
   }
 
   await client.query(
     `INSERT INTO job_edits
        (id, job_id, field_name, old_value, new_value,
-        edited_by_user_id, edited_by_name, edited_by_role)
+        edited_by_user_id, edited_by_name, edited_by_email, edited_by_role)
      VALUES ${tuples.join(', ')}`,
     values,
   )

@@ -62,7 +62,7 @@ const COLUMN_LIST = `
   custom_fields_json, campaign,
   facebook_live_url, facebook_post_id, instagram_live_url,
   posted_at, live_metrics_json, last_metrics_fetch_at,
-  briefer_display_name,
+  briefer_display_name, briefer_display_email,
   created_at, updated_at
 `
 

@@ -240,6 +240,7 @@ export function rowToJob(row: Row): Job {
     liveMetrics: mapLiveMetrics(row.live_metrics_json),
     lastMetricsFetchAt: asNullableIsoString(row.last_metrics_fetch_at),
     brieferDisplayName: asNullableString(row.briefer_display_name),
+    brieferDisplayEmail: asNullableString(row.briefer_display_email),
     createdAt: asIsoString(row.created_at),
     updatedAt: asIsoString(row.updated_at),
   }
@@ -300,6 +301,8 @@ export function rowToJobComment(row: Row): JobComment {
     authorEmail,
     authorRole,
     displayName: asNullableString(row.display_name),
+    displayEmail: asNullableString(row.display_email),
+    parentId: asNullableString(row.parent_id),
     body: asString(row.body),
     edited: asBoolean(row.edited, false),
     createdAt: asIsoString(row.created_at),

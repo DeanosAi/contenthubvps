@@ -22,7 +22,11 @@ async function fetchUsers(): Promise<UserOption[]> {
   if (inFlight) return inFlight
   inFlight = (async () => {
     try {
-      const res = await fetch('/api/users')
+      // Round 7.14: pass ?for=assignee so admins also get the slim
+      // briefer-excluded list (used by assignee dropdowns + sort by
+      // assignee). The user-management settings page calls /api/users
+      // directly without this param to get the full list.
+      const res = await fetch('/api/users?for=assignee')
       if (!res.ok) return []
       const data: UserOption[] = await res.json()
       cachedUsers = Array.isArray(data) ? data : []

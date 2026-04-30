@@ -82,6 +82,10 @@ export async function POST(req: NextRequest) {
     // profile name as before — staff identify by their own profile
     // and the prompt is only useful for the shared-account case.
     displayName: user.role === 'briefer' ? null : user.name,
+    // Round 7.14: same pattern for displayEmail. For briefers, null
+    // forces the prompt to ask. For staff, default to profile email
+    // — they don't get the prompt and use their own login email.
+    displayEmail: user.role === 'briefer' ? null : user.email,
   })
   await setSessionCookie(token)
 

@@ -31,6 +31,7 @@ type SessionMe = {
   role: 'admin' | 'member' | 'briefer'
   workspaceId: string | null
   displayName: string | null
+  displayEmail: string | null
 } | null
 
 const SETTING_KEYS: SettingKey[] = [

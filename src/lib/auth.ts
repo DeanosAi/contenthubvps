@@ -60,7 +60,13 @@ export function verifySession(token: string): SessionUser | null {
     const displayName = typeof obj.displayName === 'string' && obj.displayName.length > 0
       ? obj.displayName
       : null
-    return { userId, email, role, workspaceId, displayName }
+    // Round 7.14: decode displayEmail. Old JWTs (pre-7.14) won't
+    // have this field — defaults to null. Briefer-shell prompt
+    // re-fires when displayEmail is null for briefers.
+    const displayEmail = typeof obj.displayEmail === 'string' && obj.displayEmail.length > 0
+      ? obj.displayEmail
+      : null
+    return { userId, email, role, workspaceId, displayName, displayEmail }
   } catch {
     return null
   }

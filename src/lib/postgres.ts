@@ -158,6 +158,15 @@ export async function ensureSchema(): Promise<void> {
     `CREATE INDEX IF NOT EXISTS jobs_content_types_gin_idx ON jobs USING GIN (content_types)`
   )
 
+  // ---------- Round 7.14 — briefer email snapshot on jobs ----------
+  // When a brief is submitted, we already snapshot the briefer's
+  // display name. Round 7.14 adds the email too, so future email
+  // notifications can target the actual person who briefed (rather
+  // than a shared workspace inbox). Captured at submit-time and
+  // never updated; if the briefer changes their email next session,
+  // the original brief still remembers what was given.
+  await pool.query(`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS briefer_display_email TEXT;`)
+
   // ---------- Round 7.2: kanban_columns ----------
   // Per-workspace kanban column configuration. Lets users rename built-in
   // columns (e.g. "Posted" → "Posted/Live"), reorder them, and add
@@ -325,6 +334,35 @@ export async function ensureSchema(): Promise<void> {
     `ALTER TABLE job_comments ADD COLUMN IF NOT EXISTS display_name TEXT;`
   )
 
+  // ---------- Round 7.14 — display_email + parent_id on job_comments ----------
+  // display_email: the email address the commenter gave at the
+  // briefer prompt (or, for staff, their profile email). Stored
+  // alongside display_name. Future email notifications target this
+  // address when someone replies to the comment. The email is
+  // snapshotted per-comment so even if the briefer comes back next
+  // session under a different email, the original commenter is
+  // still reachable.
+  //
+  // parent_id: when a comment is a reply to another comment, this
+  // field holds the parent's id. NULL for top-level comments.
+  // FK with ON DELETE SET NULL: if the parent comment is deleted,
+  // the reply keeps existing but loses its threading link. The UI
+  // shows "↪ Replying to a deleted comment" in that case.
+  await pool.query(
+    `ALTER TABLE job_comments ADD COLUMN IF NOT EXISTS display_email TEXT;`
+  )
+  await pool.query(
+    `ALTER TABLE job_comments
+       ADD COLUMN IF NOT EXISTS parent_id TEXT
+       REFERENCES job_comments(id) ON DELETE SET NULL;`
+  )
+  // Index on parent_id so we can quickly find all replies to a comment
+  // (used for email notification fan-out and for rendering the chain).
+  await pool.query(
+    `CREATE INDEX IF NOT EXISTS job_comments_parent_idx
+       ON job_comments (parent_id) WHERE parent_id IS NOT NULL;`
+  )
+
   // ---------- Round 7.11 — job_edits audit log ----------
   // Per-field edit history. Logs every PATCH that touches a tracked
   // field on a job. Fed by the jobs PATCH endpoint via the
@@ -368,6 +406,16 @@ export async function ensureSchema(): Promise<void> {
     CREATE INDEX IF NOT EXISTS job_edits_job_field_idx
     ON job_edits (job_id, field_name, edited_at DESC);
   `)
+
+  // ---------- Round 7.14 — edited_by_email on job_edits ----------
+  // Audit log gets a snapshot of the editor's email address (from
+  // session.displayEmail for briefers, or session.email for staff)
+  // captured at edit time. Lets future email notifications know
+  // who to "cc" on edit-history-driven alerts. Nullable: legacy
+  // rows from before this round won't have it.
+  await pool.query(
+    `ALTER TABLE job_edits ADD COLUMN IF NOT EXISTS edited_by_email TEXT;`
+  )
 
   // ---------- bootstrap admin ----------
   const userCountRes = await pool.query<{ count: string }>('SELECT COUNT(*)::text AS count FROM users')

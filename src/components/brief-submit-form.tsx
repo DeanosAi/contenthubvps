@@ -27,6 +27,7 @@ import { JobTypePicker } from './job-type-picker'
 interface MeResponse {
   workspaceId: string | null
   displayName: string | null
+  displayEmail: string | null
 }
 
 export function BriefSubmitForm() {
