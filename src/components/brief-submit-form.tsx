@@ -39,11 +39,10 @@ export function BriefSubmitForm() {
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [dueDate, setDueDate] = useState('')
-  const [hashtags, setHashtags] = useState('')
+  const [campaign, setCampaign] = useState('')
   const [platform, setPlatform] = useState('')
   // Round 7.12: contentTypes is now a multi-select array.
   const [contentTypes, setContentTypes] = useState<string[]>([])
-  const [campaign, setCampaign] = useState('')
 
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -80,7 +79,6 @@ export function BriefSubmitForm() {
           dueDate: dueDate
             ? new Date(dueDate + 'T00:00:00').toISOString()
             : null,
-          hashtags: hashtags.trim() || null,
           platform: platform.trim() || null,
           contentTypes,
           campaign: campaign.trim() || null,
@@ -187,6 +185,14 @@ export function BriefSubmitForm() {
             />
           </Field>
           <Field label="Campaign">
+            {/* Round 7.17: matching helper line so the input box on
+                this side lines up vertically with the Type of Job
+                picker on the other side of the two-column grid.
+                Without it, this row's input sits higher than the
+                picker — visually unaligned. */}
+            <p className="text-[11px] text-slate-500 -mt-1 mb-1">
+              Part of a bigger marketing push? (Optional)
+            </p>
             <input
               type="text"
               value={campaign}
@@ -196,16 +202,6 @@ export function BriefSubmitForm() {
             />
           </Field>
         </div>
-
-        <Field label="Hashtags">
-          <input
-            type="text"
-            value={hashtags}
-            onChange={(e) => setHashtags(e.target.value)}
-            placeholder="#yourtag #another"
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:border-indigo-500"
-          />
-        </Field>
 
         {error && (
           <div className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700">
