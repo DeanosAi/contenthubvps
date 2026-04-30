@@ -73,7 +73,39 @@ export function JobListView({
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white surface-shadow overflow-x-auto">
-      <table className="w-full text-sm">
+      {/*
+        Round 7.16: column sizing fix.
+
+        Previously the table used the default `table-auto` layout,
+        which sizes columns based on content. Because the Title
+        cell contains a multi-line stack (title + optional approval
+        pill + description), the browser kept giving Title 50%+ of
+        the width and squeezing every other column — dates wrapped
+        to 3 lines, platform lists stacked vertically, the whole
+        thing pushed past the viewport.
+
+        Switching to `table-fixed` + an explicit <colgroup> gives us
+        deterministic widths that don't depend on content. The Title
+        column gets the largest share (it carries the most text)
+        but the other columns are guaranteed enough room to stay
+        on a single line.
+
+        Percentages chosen to total ~100% on a typical desktop
+        viewport. The container retains overflow-x-auto so on
+        narrower screens (mobile, narrow side-by-side) the table
+        scrolls horizontally rather than collapsing.
+      */}
+      <table className="w-full text-sm table-fixed">
+        <colgroup>
+          <col style={{ width: '28%' }} />{/* Title */}
+          <col style={{ width: '11%' }} />{/* Workspace */}
+          <col style={{ width: '12%' }} />{/* Stage */}
+          <col style={{ width: '14%' }} />{/* Platform */}
+          <col style={{ width: '7%' }} />{/* Priority */}
+          <col style={{ width: '9%' }} />{/* Due */}
+          <col style={{ width: '10%' }} />{/* Assigned */}
+          <col style={{ width: '9%' }} />{/* Updated */}
+        </colgroup>
         <thead className="text-xs uppercase tracking-wider text-slate-600 border-b border-slate-200">
           <tr>
             <th className="text-left px-4 py-3 font-semibold">Title</th>
@@ -113,17 +145,34 @@ export function JobListView({
                     </div>
                   )}
                 </td>
-                <td className="px-4 py-3 text-slate-600">{wsName.get(job.workspaceId) ?? '—'}</td>
+                <td className="px-4 py-3 text-slate-600 truncate" title={wsName.get(job.workspaceId) ?? ''}>
+                  {wsName.get(job.workspaceId) ?? '—'}
+                </td>
                 <td className="px-4 py-3 text-slate-700">
-                  <span className="inline-flex items-center gap-2">
+                  {/* Round 7.16: whitespace-nowrap so two-word stage
+                      labels like "In Production" or "Posted/Live"
+                      stay on one line. The dot + label sits in a
+                      flex row that truncates with ellipsis if even
+                      the label is too long for the column. */}
+                  <span className="inline-flex items-center gap-2 max-w-full">
                     <span
-                      className="h-2 w-2 rounded-full"
+                      className="h-2 w-2 rounded-full shrink-0"
                       style={{ backgroundColor: col?.color ?? '#64748b' }}
                     />
-                    {col?.label ?? job.stage}
+                    <span className="truncate" title={col?.label ?? job.stage}>
+                      {col?.label ?? job.stage}
+                    </span>
                   </span>
                 </td>
-                <td className="px-4 py-3 text-slate-600">{job.platform || '—'}</td>
+                <td className="px-4 py-3 text-slate-600">
+                  {/* Round 7.16: platform value can be a comma-list
+                      ("facebook, instagram, tiktok, ..."). Truncate
+                      to one line with the full value in a tooltip
+                      so it doesn't blow the row height. */}
+                  <span className="block truncate" title={job.platform ?? ''}>
+                    {job.platform || '—'}
+                  </span>
+                </td>
                 <td className="px-4 py-3">
                   {job.priority > 0 ? (
                     <span className="inline-flex rounded-full bg-indigo-50 text-indigo-700 px-2 py-0.5 text-[10px] font-semibold">
@@ -133,13 +182,13 @@ export function JobListView({
                     <span className="text-slate-500">—</span>
                   )}
                 </td>
-                <td className={`px-4 py-3 ${overdue ? 'text-red-700 font-medium' : 'text-slate-600'}`}>
+                <td className={`px-4 py-3 whitespace-nowrap ${overdue ? 'text-red-700 font-medium' : 'text-slate-600'}`}>
                   {formatDate(job.dueDate)}
                 </td>
-                <td className="px-4 py-3 text-slate-600">
+                <td className="px-4 py-3 text-slate-600 truncate" title={job.assignedTo ? userName.get(job.assignedTo) ?? '' : ''}>
                   {job.assignedTo ? userName.get(job.assignedTo) ?? 'Unknown' : '—'}
                 </td>
-                <td className="px-4 py-3 text-slate-500 text-xs">{formatDate(job.updatedAt)}</td>
+                <td className="px-4 py-3 text-slate-500 text-xs whitespace-nowrap">{formatDate(job.updatedAt)}</td>
               </tr>
             )
           })}
