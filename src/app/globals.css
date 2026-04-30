@@ -71,7 +71,12 @@
 html, body {
   background-color: #f1f5f9;
   color: #0f172a;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  /* Round 7.15: Montserrat (loaded via next/font in layout.tsx) is
+     the primary sans. The CSS variable --font-montserrat is set on
+     the <html> element by next/font; if for any reason the variable
+     is undefined or the font fails to load, the browser falls
+     through to the system stack so the page never renders unstyled. */
+  font-family: var(--font-montserrat), -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   color-scheme: light;
   min-height: 100vh;
 }
