@@ -144,14 +144,16 @@ export function HostedSidebar({
           display:none — the sidebar is always visible inline. */}
       <div className="lg:hidden col-span-full flex items-center justify-between gap-3 px-4 py-3 rounded-2xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.06),0_4px_16px_rgba(15,23,42,0.08)]">
         <div className="flex items-center gap-3">
-          <div className="h-8 w-8 rounded-lg bg-indigo-100 flex items-center justify-center shrink-0">
-            <div className="h-4 w-4 rounded bg-indigo-600" />
-          </div>
+          {/* Round 7.18: replaced /content-hub-logo.jpg with the new
+              transparent PNG compact lockup. The lockup includes the
+              kanban-icon mark inline, so the small indigo placeholder
+              square that used to sit to its left is now redundant
+              (it duplicated visual weight) and has been removed. */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src="/content-hub-logo.jpg"
+            src="/content-hub-logo.png"
             alt="Content Hub"
-            className="h-7 w-auto"
+            className="h-8 w-auto"
           />
         </div>
         <button
@@ -220,20 +222,21 @@ export function HostedSidebar({
           sidebar size). The remaining wordmark is sized h-8 to
           match the placeholder square's height, giving a clean
           balanced row. */}
-      <div className="px-4 py-3.5 border-b border-slate-200 flex items-center gap-3">
-        <div className="h-8 w-8 rounded-lg bg-indigo-100 flex items-center justify-center">
-          <div className="h-4 w-4 rounded bg-indigo-600" />
-        </div>
+      <div className="px-4 py-3.5 border-b border-slate-200 flex items-center">
+        {/* Round 7.18: same as the mobile header — placeholder square
+            removed because the new compact lockup includes the icon
+            inline. The logo now spans the full width of the branding
+            row, giving a cleaner sidebar header. */}
         {/* eslint-disable-next-line @next/next/no-img-element --
-            using plain <img> intentionally. The logo is a tiny static
-            asset (~15 KB), the optimisation Next/Image provides
-            (responsive variants, lazy loading, blur placeholder) is
-            unnecessary for a branding mark that's always above the
-            fold and never resizes. */}
+            using plain <img> intentionally. The logo is a small
+            static asset (~120 KB), the optimisation Next/Image
+            provides (responsive variants, lazy loading, blur
+            placeholder) is unnecessary for a branding mark that's
+            always above the fold and never resizes. */}
         <img
-          src="/content-hub-logo.jpg"
+          src="/content-hub-logo.png"
           alt="Content Hub"
-          className="h-8 w-auto"
+          className="h-9 w-auto"
         />
       </div>
 

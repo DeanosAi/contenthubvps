@@ -157,18 +157,29 @@ export function BrieferShell({ children }: { children: React.ReactNode }) {
       <header className="bg-white border-b border-slate-200 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
         <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
+            {/* Round 7.18: compact lockup replaces the small workspace
+                colour swatch + "Briefer portal" eyebrow label. The
+                lockup self-identifies the product; we keep the
+                workspace name as a subtitle since briefers need to
+                know which venue they're in (especially if they have
+                access to multiple venues elsewhere). */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/content-hub-logo.png"
+              alt="Content Hub"
+              className="h-8 w-auto shrink-0"
+            />
             {workspace && (
-              <span
-                className="inline-block h-6 w-6 rounded-md shrink-0"
-                style={{ backgroundColor: workspace.color }}
-              />
+              <div className="min-w-0 border-l border-slate-200 pl-3 flex items-center gap-2">
+                <span
+                  className="inline-block h-3 w-3 rounded-sm shrink-0"
+                  style={{ backgroundColor: workspace.color }}
+                />
+                <span className="text-sm font-medium truncate text-slate-700">
+                  {workspace.name}
+                </span>
+              </div>
             )}
-            <div className="min-w-0">
-              <p className="text-[11px] uppercase tracking-wider text-slate-500">Briefer portal</p>
-              <h1 className="text-base font-semibold truncate">
-                {workspace?.name ?? 'Content Hub'}
-              </h1>
-            </div>
           </div>
           <div className="flex items-center gap-3 text-sm">
             {me?.displayName && (
