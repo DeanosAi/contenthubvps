@@ -199,6 +199,7 @@ export function HostedSidebar({
           transition-transform duration-200 ease-out
           fixed inset-y-0 left-0 z-50 w-72 max-w-[85vw] rounded-r-2xl
           lg:rounded-2xl lg:self-start lg:translate-x-0 lg:relative lg:z-auto lg:w-auto lg:max-w-none lg:inset-auto
+          lg:sticky lg:top-8 lg:max-h-[calc(100vh-4rem)]
           ${mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
         `}
       >
@@ -265,10 +266,14 @@ export function HostedSidebar({
           </button>
         </div>
 
-        {/* Scroll region. max-h means the sidebar's overall height is
-            bounded — past ~6-7 workspaces, the list scrolls inside this
-            container instead of the sidebar growing. */}
-        <div className="flex-1 overflow-y-auto px-3 pb-3 max-h-[28rem]">
+        {/* Round 7.13: scroll region now flexes inside a viewport-
+            bounded aside (lg:max-h-[calc(100vh-4rem)] lg:sticky lg:top-8
+            on the parent). Drops the previous hard 28rem cap because
+            tall viewports gained no extra space; with sticky + viewport
+            bound the list takes whatever room is left after branding
+            and footer actions. min-h-0 is the dance flex needs to allow
+            this child to actually shrink and scroll inside its parent. */}
+        <div className="flex-1 min-h-0 overflow-y-auto px-3 pb-3">
           <DragDropContext onDragEnd={onDragEnd}>
             <Droppable droppableId="workspaces">
               {(provided) => (

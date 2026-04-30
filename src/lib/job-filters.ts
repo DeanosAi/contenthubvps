@@ -5,6 +5,7 @@
 // All inputs are immutable — these never mutate the input array.
 
 import type { ApprovalStatus, Job } from './types'
+import { ALLOWED_JOB_TYPES } from './types'
 
 export type SortKey =
   | 'newest'
@@ -14,6 +15,14 @@ export type SortKey =
   | 'priorityDesc'
   | 'priorityAsc'
   | 'recentlyUpdated'
+  // Round 7.13: categorical sorts. Each groups jobs by the named
+  // attribute, sorted alphabetically (or by a meaningful order),
+  // with empty/null values sinking to the bottom.
+  | 'assignee'
+  | 'jobType'
+  | 'approvalStatus'
+  | 'stage'
+  | 'platform'
 
 /**
  * Round 7.12: special sentinel value for the assignedTo filter that
@@ -147,9 +156,53 @@ export function applyJobFilters(jobs: Job[], filter: JobFilterState): Job[] {
   })
 }
 
+/**
+ * Round 7.13: optional context for sorts that need external info to
+ * sort meaningfully. Currently only the assignee sort uses this —
+ * we want to sort by the user's NAME, not the opaque user ID. The
+ * caller passes a lookup function (typically wrapped over the user
+ * list cached in `useUsers()`).
+ *
+ * If not provided, the assignee sort falls back to sorting by user
+ * ID — still groups jobs by assignee but the visual order is
+ * meaningless.
+ */
+export interface SortOptions {
+  userNameById?: (id: string) => string | null
+}
+
+/**
+ * Round 7.13: stage display order — built-in stages by their natural
+ * left-to-right order on the kanban, then any custom stages
+ * alphabetically after. Used by the 'stage' sort.
+ */
+const STAGE_ORDER: Record<string, number> = {
+  brief: 0,
+  production: 1,
+  ready: 2,
+  posted: 3,
+  archive: 4,
+}
+
+/**
+ * Round 7.13: approval status order — most-pressing first.
+ * "awaiting" surfaces top because it needs an action; "changes_requested"
+ * is also actionable; "approved" is settled; "none" sinks to the bottom.
+ */
+const APPROVAL_ORDER: Record<ApprovalStatus, number> = {
+  awaiting: 0,
+  changes_requested: 1,
+  approved: 2,
+  none: 3,
+}
+
 /** Sort jobs by the selected key. `newest` is the default and matches the
  * server's existing ORDER BY. */
-export function applyJobSort(jobs: Job[], sort: SortKey): Job[] {
+export function applyJobSort(
+  jobs: Job[],
+  sort: SortKey,
+  options?: SortOptions,
+): Job[] {
   const out = [...jobs]
   switch (sort) {
     case 'newest':
@@ -182,13 +235,88 @@ export function applyJobSort(jobs: Job[], sort: SortKey): Job[] {
     case 'recentlyUpdated':
       out.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
       break
+    case 'assignee': {
+      // Sort alphabetically by assignee NAME. Unassigned jobs last.
+      // Tie-break on createdAt so within one assignee, newer jobs
+      // come first (matches the default "newest" within group).
+      const lookup = options?.userNameById
+      const nameFor = (j: Job): string => {
+        if (!j.assignedTo) return '\uffff' // unassigned sinks
+        if (lookup) return (lookup(j.assignedTo) || j.assignedTo).toLowerCase()
+        return j.assignedTo.toLowerCase()
+      }
+      out.sort((a, b) => {
+        const cmp = nameFor(a).localeCompare(nameFor(b))
+        if (cmp !== 0) return cmp
+        return b.createdAt.localeCompare(a.createdAt)
+      })
+      break
+    }
+    case 'jobType': {
+      // Group by Type of Job. Multi-type jobs sort by their FIRST
+      // type (in ALLOWED_JOB_TYPES canonical order). Untyped jobs
+      // sink to the bottom. Tie-break on createdAt newest-first.
+      const orderOf = (t: string): number => {
+        const idx = (ALLOWED_JOB_TYPES as readonly string[]).indexOf(t)
+        return idx === -1 ? Number.MAX_SAFE_INTEGER : idx
+      }
+      const firstTypeOrder = (j: Job): number => {
+        const types = j.contentTypes ?? []
+        if (types.length === 0) return Number.MAX_SAFE_INTEGER + 1
+        return Math.min(...types.map(orderOf))
+      }
+      out.sort((a, b) => {
+        const ao = firstTypeOrder(a)
+        const bo = firstTypeOrder(b)
+        if (ao !== bo) return ao - bo
+        return b.createdAt.localeCompare(a.createdAt)
+      })
+      break
+    }
+    case 'approvalStatus':
+      // Surface jobs needing attention first: awaiting →
+      // changes_requested → approved → none.
+      out.sort((a, b) => {
+        const ao = APPROVAL_ORDER[a.approvalStatus] ?? 99
+        const bo = APPROVAL_ORDER[b.approvalStatus] ?? 99
+        if (ao !== bo) return ao - bo
+        return b.createdAt.localeCompare(a.createdAt)
+      })
+      break
+    case 'stage':
+      // Built-in stages by their natural left-to-right kanban order,
+      // then custom stages alphabetically after.
+      out.sort((a, b) => {
+        const ao = STAGE_ORDER[a.stage] ?? 100
+        const bo = STAGE_ORDER[b.stage] ?? 100
+        if (ao !== bo) return ao - bo
+        // Within the same stage bucket (or both custom): alpha by stage key
+        if (a.stage !== b.stage) return a.stage.localeCompare(b.stage)
+        return b.createdAt.localeCompare(a.createdAt)
+      })
+      break
+    case 'platform':
+      // Group by platform alphabetically. Platform-less jobs last.
+      out.sort((a, b) => {
+        const ap = (a.platform ?? '\uffff').toLowerCase()
+        const bp = (b.platform ?? '\uffff').toLowerCase()
+        const cmp = ap.localeCompare(bp)
+        if (cmp !== 0) return cmp
+        return b.createdAt.localeCompare(a.createdAt)
+      })
+      break
   }
   return out
 }
 
 /** Convenience: filter then sort in one call. */
-export function applyJobView(jobs: Job[], filter: JobFilterState, sort: SortKey): Job[] {
-  return applyJobSort(applyJobFilters(jobs, filter), sort)
+export function applyJobView(
+  jobs: Job[],
+  filter: JobFilterState,
+  sort: SortKey,
+  options?: SortOptions,
+): Job[] {
+  return applyJobSort(applyJobFilters(jobs, filter), sort, options)
 }
 
 /** Detect whether the user has any non-default filter active. Used by the

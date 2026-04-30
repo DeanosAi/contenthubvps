@@ -210,6 +210,11 @@ export async function ensureSchema(): Promise<void> {
   //
   // The default for the 'posted' column is "Posted/Live" per Round 7.2
   // brief; existing teams can rename in either direction freely.
+  //
+  // Round 7.13: also runs through seedDefaultKanbanColumns() per
+  // workspace (called from POST /api/workspaces) so newly-created
+  // workspaces always start with the five defaults — without
+  // depending on an app restart to trigger this WITH-CTE auto-seed.
   await pool.query(`
     WITH workspaces_needing_seed AS (
       SELECT w.id AS workspace_id
@@ -415,3 +420,47 @@ export const BUILTIN_COLUMN_DEFAULTS: Array<{
   { stage_key: 'posted',     label: 'Posted/Live',       color: '#10b981', sort_order: 3 },
   { stage_key: 'archive',    label: 'Archive',           color: '#4b5563', sort_order: 4 },
 ]
+
+/**
+ * Round 7.13 — seed the five default kanban columns for a single
+ * workspace.
+ *
+ * Used by:
+ *   1. ensureSchema() — runs the bulk auto-seed once at app boot
+ *      to backfill any pre-existing workspaces.
+ *   2. POST /api/workspaces — runs per-workspace immediately after
+ *      a new workspace is created, so the user doesn't see "No
+ *      kanban columns configured" the first time they visit it.
+ *
+ * Idempotent: uses `ON CONFLICT DO NOTHING` so re-runs are safe.
+ * The kanban_columns primary key is `id` (random UUID) but the
+ * (workspace_id, stage_key) pair has a unique index — that's what
+ * the conflict clause guards.
+ *
+ * Optionally takes a pg client so the caller can run this inside
+ * a transaction with the workspace INSERT. If no client is passed,
+ * runs in a single one-off connection.
+ */
+export async function seedDefaultKanbanColumns(
+  workspaceId: string,
+  client?: { query: (text: string, values?: unknown[]) => Promise<unknown> }
+): Promise<void> {
+  const exec = client ?? pool
+  // Build a multi-row VALUES clause. Five rows, six values each
+  // (id, workspace_id, stage_key, label, color, sort_order, is_builtin).
+  const tuples: string[] = []
+  const values: unknown[] = []
+  let p = 1
+  for (const c of BUILTIN_COLUMN_DEFAULTS) {
+    tuples.push(`(gen_random_uuid()::text, $${p++}, $${p++}, $${p++}, $${p++}, $${p++}, TRUE)`)
+    values.push(workspaceId, c.stage_key, c.label, c.color, c.sort_order)
+  }
+  await exec.query(
+    `INSERT INTO kanban_columns
+      (id, workspace_id, stage_key, label, color, sort_order, is_builtin)
+     VALUES ${tuples.join(', ')}
+     ON CONFLICT (workspace_id, stage_key) DO NOTHING`,
+    values
+  )
+}
+

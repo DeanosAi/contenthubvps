@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { randomUUID } from 'crypto'
-import { pool, ensureSchema } from '@/lib/postgres'
+import { pool, ensureSchema, seedDefaultKanbanColumns } from '@/lib/postgres'
 import { getSession } from '@/lib/auth'
 import { rowToWorkspace } from '@/lib/db-mappers'
 
@@ -96,6 +96,14 @@ export async function POST(req: NextRequest) {
      ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
     [id, session.userId, parsed.data.name, parsed.data.color, sortOrder, fbUrl, igUrl]
   )
+
+  // Round 7.13: seed the five default kanban columns immediately
+  // for the new workspace, so the user doesn't see "No kanban
+  // columns configured" when they first navigate to it. Previously
+  // this only happened via the bulk auto-seed in ensureSchema(),
+  // which fires once per app boot and missed any workspaces created
+  // since the last boot.
+  await seedDefaultKanbanColumns(id)
 
   const result = await pool.query(
     `SELECT id, owner_id, name, color, sort_order, facebook_page_url, instagram_page_url, created_at, updated_at

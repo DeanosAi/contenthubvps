@@ -16,6 +16,37 @@ import {
   type SortKey,
 } from '@/lib/job-filters'
 import type { Job, KanbanColumn, Workspace } from '@/lib/types'
+import { useUsers } from '@/lib/use-users'
+
+/**
+ * Round 7.13: format the "Updated N min ago" indicator next to
+ * the refresh button. Returns a short, scannable string.
+ *
+ * Buckets:
+ *   - <10 seconds: "just now"
+ *   - <60 seconds: "<N>s ago"
+ *   - <60 minutes: "<N>m ago"
+ *   - <24 hours:   "<N>h ago"
+ *   - older:       a date stamp
+ *
+ * Tight ranges keep the indicator visually punchy. We don't need
+ * "1 minute ago" full-words — the indicator is supplementary, not
+ * the headline copy.
+ */
+function formatRelativeTime(stampMs: number | null, nowMs: number): string {
+  if (stampMs == null) return '—'
+  const diffSec = Math.max(0, Math.floor((nowMs - stampMs) / 1000))
+  if (diffSec < 10) return 'just now'
+  if (diffSec < 60) return `${diffSec}s ago`
+  const diffMin = Math.floor(diffSec / 60)
+  if (diffMin < 60) return `${diffMin}m ago`
+  const diffHr = Math.floor(diffMin / 60)
+  if (diffHr < 24) return `${diffHr}h ago`
+  return new Date(stampMs).toLocaleDateString(undefined, {
+    day: 'numeric',
+    month: 'short',
+  })
+}
 
 export function AppShell() {
   // ---------- top-level data ----------
@@ -52,6 +83,22 @@ export function AppShell() {
   const [loading, setLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
+  /**
+   * Round 7.13: timestamp of the last successful data refresh.
+   * Updated by the initial load, the workspace-change reload,
+   * and the new tab-focus / manual refresh paths. Powers the
+   * "Updated N min ago" indicator next to the refresh button.
+   *
+   * `refreshTick` is a counter that increments on a 30-second
+   * interval to force the indicator to re-render — without it,
+   * "Updated 1 min ago" would stay frozen at "1 min ago" forever
+   * because the underlying timestamp doesn't change between
+   * refreshes.
+   */
+  const [lastDataRefreshAt, setLastDataRefreshAt] = useState<number | null>(null)
+  const [refreshing, setRefreshing] = useState(false)
+  const [, setRefreshTick] = useState(0)
+
   // The API returns camelCase, fully-shaped Job/Workspace objects — no
   // inline mapping needed.
 
@@ -77,6 +124,10 @@ export function AppShell() {
     }
     const data: Job[] = await res.json()
     setJobs(data)
+    // Round 7.13: mark this as the latest data-refresh moment.
+    // Used by the "Updated N min ago" indicator near the refresh
+    // button so the user has a sense of how fresh the view is.
+    setLastDataRefreshAt(Date.now())
   }
 
   /** Round 7.2b: load the per-workspace kanban column config.
@@ -136,6 +187,67 @@ export function AppShell() {
     const stillExists = jobs.some((j) => j.id === selectedJob.id)
     if (!stillExists) setSelectedJob(null)
   }, [jobs, selectedJob])
+
+  /**
+   * Round 7.13: refresh data on demand or when the tab regains
+   * focus. Reloads workspaces (a teammate may have created or
+   * renamed one) AND the current workspace's jobs (status updates,
+   * comments, edits made elsewhere).
+   *
+   * NOT a polling loop — that wastes bandwidth for the 95% of the
+   * time nothing changed. Tab focus is when user attention is
+   * actually back on the page; that's the right moment.
+   */
+  async function refreshData() {
+    if (refreshing) return // de-dupe rapid focus events
+    setRefreshing(true)
+    try {
+      const ws = await loadWorkspaces()
+      if (selectedWorkspaceId && !ws.some((w) => w.id === selectedWorkspaceId)) {
+        // Workspace was deleted from elsewhere — fall back to first
+        // remaining one. The downstream useEffect on workspace change
+        // will trigger jobs/columns reload.
+        setSelectedWorkspaceId(ws[0]?.id ?? '')
+      } else if (selectedWorkspaceId) {
+        await loadJobs(selectedWorkspaceId)
+      }
+    } finally {
+      setRefreshing(false)
+    }
+  }
+
+  /**
+   * Round 7.13: re-fetch data when the browser tab regains focus.
+   * Skipping this on `loading` (initial-load path already running)
+   * avoids a double-fetch race on first mount.
+   */
+  useEffect(() => {
+    function onFocus() {
+      if (loading) return
+      void refreshData()
+    }
+    window.addEventListener('focus', onFocus)
+    return () => window.removeEventListener('focus', onFocus)
+    // refreshData is recreated on every render but we don't want this
+    // useEffect to recreate the listener constantly. The listener
+    // closes over the fresh refreshData each call via React's render
+    // semantics — no stale-closure issue here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, selectedWorkspaceId, refreshing])
+
+  /**
+   * Round 7.13: tick the "Updated N min ago" indicator forward
+   * every 30 seconds, so the displayed text drifts naturally
+   * (1 min ago → 2 min ago → ...). Without this, the text would
+   * stay frozen until the next actual refresh.
+   */
+  useEffect(() => {
+    if (lastDataRefreshAt == null) return
+    const interval = window.setInterval(() => {
+      setRefreshTick((t) => t + 1)
+    }, 30_000)
+    return () => window.clearInterval(interval)
+  }, [lastDataRefreshAt])
 
   async function refreshAll() {
     const ws = await loadWorkspaces()
@@ -421,12 +533,24 @@ export function AppShell() {
   // ---------- derived data ----------
   // Apply workspace filter first (the filter state doesn't include
   // workspace — it's an outer constraint), then run filters/sort.
+  // Round 7.13: pull users to support the new "Sort by Assignee"
+  // option which needs to resolve user IDs to names.
+  const { users } = useUsers()
+  const userNameById = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const u of users) {
+      map.set(u.id, u.name || u.email)
+    }
+    return (id: string): string | null => map.get(id) ?? null
+  }, [users])
+  const sortOptions = useMemo(() => ({ userNameById }), [userNameById])
+
   const visibleJobs = useMemo(() => {
     const inWorkspace = selectedWorkspaceId
       ? jobs.filter((j) => j.workspaceId === selectedWorkspaceId)
       : jobs
-    return applyJobView(inWorkspace, filter, sort)
-  }, [jobs, selectedWorkspaceId, filter, sort])
+    return applyJobView(inWorkspace, filter, sort, sortOptions)
+  }, [jobs, selectedWorkspaceId, filter, sort, sortOptions])
 
   /** Workspace-scoped jobs list, NOT filtered. The widgets compute counts
    * from this — we don't want the widgets to react to the filters they
@@ -451,10 +575,10 @@ export function AppShell() {
    */
   const archiveTrueCount = useMemo(() => {
     const filterWithoutHideArchived = { ...filter, hideArchived: false, stage: '' }
-    return applyJobView(workspaceJobs, filterWithoutHideArchived, sort).filter(
+    return applyJobView(workspaceJobs, filterWithoutHideArchived, sort, sortOptions).filter(
       (j) => j.stage === 'archive'
     ).length
-  }, [workspaceJobs, filter, sort])
+  }, [workspaceJobs, filter, sort, sortOptions])
 
   const activeWorkspace = workspaces.find((w) => w.id === selectedWorkspaceId)
 
@@ -604,7 +728,7 @@ export function AppShell() {
 
         {/* Row 2 — kanban / list view, full width below the sidebar */}
         <section className="col-span-2 space-y-4 min-w-0">
-          <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center justify-between gap-4 flex-wrap">
             <div>
               <h2 className="text-2xl font-semibold text-slate-900">
                 {view === 'kanban' ? 'Kanban' : 'All jobs'}
@@ -613,7 +737,35 @@ export function AppShell() {
                 {visibleJobs.length} {visibleJobs.length === 1 ? 'job' : 'jobs'} shown
               </p>
             </div>
-            <ViewToggle value={view} onChange={setView} />
+            <div className="flex items-center gap-3 flex-wrap">
+              {/* Round 7.13: manual refresh + freshness indicator.
+                  Sits to the left of the view toggle — same group of
+                  view-level controls. The relative-time text is
+                  read by screen readers via title; visually it's a
+                  small slate label. The button shows "Refreshing…"
+                  while in-flight. */}
+              <span
+                className="text-xs text-slate-500"
+                title={
+                  lastDataRefreshAt
+                    ? new Date(lastDataRefreshAt).toLocaleString()
+                    : 'Not yet loaded'
+                }
+              >
+                Updated {formatRelativeTime(lastDataRefreshAt, Date.now())}
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  void refreshData()
+                }}
+                disabled={refreshing}
+                className="rounded-lg border border-slate-300 bg-white hover:border-indigo-400 hover:text-indigo-700 text-slate-700 text-xs font-medium px-3 py-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {refreshing ? 'Refreshing…' : 'Refresh'}
+              </button>
+              <ViewToggle value={view} onChange={setView} />
+            </div>
           </div>
 
           {view === 'kanban' ? (

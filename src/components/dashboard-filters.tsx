@@ -27,6 +27,12 @@ const SORT_OPTIONS: { value: SortKey; label: string }[] = [
   { value: 'dueDateDesc', label: 'Due date (latest)' },
   { value: 'priorityDesc', label: 'Priority (highest)' },
   { value: 'priorityAsc', label: 'Priority (lowest)' },
+  // Round 7.13: categorical sorts — group jobs by attribute.
+  { value: 'assignee', label: 'Assignee (A → Z)' },
+  { value: 'jobType', label: 'Type of Job' },
+  { value: 'approvalStatus', label: 'Approval status (action first)' },
+  { value: 'stage', label: 'Stage' },
+  { value: 'platform', label: 'Platform' },
 ]
 
 /**

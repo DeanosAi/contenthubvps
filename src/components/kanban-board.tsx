@@ -4,6 +4,7 @@ import { useMemo } from 'react'
 import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd'
 import type { Job, KanbanColumn } from '@/lib/types'
 import { useUsers } from '@/lib/use-users'
+import { ApprovalStatusPill } from './approval-status-pill'
 
 /** Two-letter initials from a name or email — used for the assignee avatar
  * dot on cards. */
@@ -215,6 +216,16 @@ export function KanbanBoard({
                                 </span>
                               )}
                             </div>
+                            {/* Round 7.13: approval status pill renders
+                                only when status is not 'none'. Sits
+                                directly under the title, left-aligned,
+                                so it's the first thing the eye lands
+                                on after the title. */}
+                            {job.approvalStatus !== 'none' && (
+                              <div className="-mt-1">
+                                <ApprovalStatusPill status={job.approvalStatus} size="sm" />
+                              </div>
+                            )}
                             {job.description && (
                               <p className="text-xs text-slate-600 line-clamp-2">{job.description}</p>
                             )}

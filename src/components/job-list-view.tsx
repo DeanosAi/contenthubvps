@@ -3,6 +3,7 @@
 import { useMemo } from 'react'
 import type { Job, KanbanColumn, Workspace } from '@/lib/types'
 import { useUsers } from '@/lib/use-users'
+import { ApprovalStatusPill } from './approval-status-pill'
 
 function formatDate(d: string | null): string {
   if (!d) return '—'
@@ -97,6 +98,15 @@ export function JobListView({
               >
                 <td className="px-4 py-3">
                   <div className="font-medium line-clamp-1 text-slate-900">{job.title}</div>
+                  {/* Round 7.13: approval status pill renders only
+                      when status is not 'none'. Sits under the title
+                      so the eye lands on it after the title — same
+                      pattern as kanban cards. */}
+                  {job.approvalStatus !== 'none' && (
+                    <div className="mt-1">
+                      <ApprovalStatusPill status={job.approvalStatus} size="sm" />
+                    </div>
+                  )}
                   {job.description && (
                     <div className="text-xs text-slate-600 line-clamp-1 mt-0.5">
                       {job.description}
